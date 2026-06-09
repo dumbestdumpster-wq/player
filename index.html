@@ -1,0 +1,212 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ultimate TMDb + VidKing Player</title>
+<style>
+  :root{--bg:#0d0d0d;--panel:#111;--muted:#1a1a1a;--accent:#2b6;}
+  body{background:var(--bg);color:#e6e6e6;font-family:Arial,Helvetica,sans-serif;margin:0;padding:20px}
+  .container{max-width:980px;margin:auto;background:var(--panel);padding:18px;border-radius:12px;border:1px solid #222}
+  input,select{width:100%;padding:10px;margin-top:8px;margin-bottom:12px;background:var(--muted);color:#eee;border:1px solid #333;border-radius:6px}
+  button{padding:10px 14px;border-radius:6px;border:none;background:#333;color:#fff;cursor:pointer}
+  .row{display:flex;gap:12px;align-items:center}
+  .result-item{cursor:pointer;margin-bottom:12px;padding:12px;border-radius:8px;background:var(--muted);border:1px solid #222}
+  img.poster{width:90px;height:auto;border-radius:6px;margin-left:10px}
+  #playerWrap{margin-top:18px;background:#000;border-radius:8px;padding:8px;border:1px solid #222}
+  #embedFrame,video,audio{width:100%;height:560px;border-radius:6px;background:#000}
+  audio{height:64px}
+  .controls{display:flex;gap:8px;margin-top:8px;align-items:center}
+  .small{padding:6px 8px;font-size:14px}
+  @media(max-width:700px){#embedFrame,video{height:320px}}
+</style>
+</head>
+<body>
+<div class="container">
+  <h2>🎬 Ultimate TMDb + VidKing Player</h2>
+
+  <input id="searchInput" placeholder="Search movies or TV shows..." />
+  <div class="row" style="margin-top:8px">
+    <button onclick="searchTMDB()">Search</button>
+    <button onclick="showAudioUploader()" class="small">Open Audio Player</button>
+  </div>
+
+  <div id="searchResults" style="margin-top:16px"></div>
+
+  <div id="selectorArea" style="margin-top:16px;display:none">
+    <h3 id="selectedTitle"></h3>
+    <label>Season:</label>
+    <select id="seasonSelect" onchange="loadEpisodes()"></select>
+    <label>Episode:</label>
+    <select id="episodeSelect" onchange="loadPlayer()"></select>
+  </div>
+
+  <div id="playerWrap" style="display:none">
+    <div id="playerHeader" class="row" style="justify-content:space-between">
+      <div><strong id="playerTitle"></strong></div>
+      <div class="controls">
+        <button onclick="toggleFullscreen()" class="small">Fullscreen</button>
+        <button id="tryDownloadBtn" onclick="attemptDownload()" class="small">Download</button>
+      </div>
+    </div>
+
+    <div id="playerContainer" style="margin-top:8px"></div>
+  </div>
+
+  <div id="audioPanel" style="display:none;margin-top:16px">
+    <h3>Audio Player</h3>
+    <input id="audioUrl" placeholder="Direct MP3 URL or streaming URL" />
+    <div class="row" style="margin-top:8px">
+      <button onclick="loadAudio()" class="small">Load</button>
+      <button onclick="addSample()" class="small">Sample MP3</button>
+    </div>
+    <div id="audioContainer" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<script>
+const API_KEY = "3ca5f3df3ee394337393273aa440c425";
+let currentID=null,currentType=null,currentDirectUrl=null,currentIsMediaFile=false;
+const embedServers = [
+  id => `https://www.vidking.net/embed/movie/${id}?autoPlay=true`,
+  id => `https://www.2embed.cc/embed/${id}`,
+  id => `https://vidsrc.to/embed/movie/${id}`,
+  id => `https://autoembed.cc/movie/tmdb/${id}`
+];
+
+function searchTMDB(){
+  const q=document.getElementById('searchInput').value.trim();
+  if(!q) return alert('Type something first!');
+  const urlM=`https://api.themoviedb.org/3/search/movie?api_key=${API_KEY}&query=${encodeURIComponent(q)}`;
+  const urlT=`https://api.themoviedb.org/3/search/tv?api_key=${API_KEY}&query=${encodeURIComponent(q)}`;
+  Promise.all([fetch(urlM),fetch(urlT)]).then(r=>Promise.all(r.map(x=>x.json()))).then(([m,t])=>displayResults(m.results,t.results));
+}
+
+function displayResults(movies,tv){
+  const c=document.getElementById('searchResults'); c.innerHTML='<h3>Results:</h3>';
+  const all=[...movies.map(x=>({...x,media_type:'movie'})),...tv.map(x=>({...x,media_type:'tv'}))];
+  if(all.length===0){c.innerHTML+='<p>No results found.</p>';return;}
+  all.forEach(item=>{
+    const title=item.media_type==='movie'?item.title:item.name;
+    const poster=item.poster_path?`https://image.tmdb.org/t/p/w200${item.poster_path}`:'';
+    const html=`<div class="result-item" onclick="selectItem(${item.id},'${item.media_type}','${title.replace(/'/g,"\\'")}')">
+      <strong>${title}</strong> <small>(${item.media_type.toUpperCase()})</small>
+      ${poster?`<img class="poster" src="${poster}">`:''}
+    </div>`;
+    c.innerHTML+=html;
+  });
+}
+
+function selectItem(id,type,title){
+  currentID=id; currentType=type;
+  document.getElementById('selectedTitle').innerText=title;
+  document.getElementById('selectorArea').style.display='block';
+  if(type==='movie') loadMoviePlayer(); else loadSeasons();
+}
+
+function loadMoviePlayer(){
+  document.getElementById('playerWrap').style.display='block';
+  document.getElementById('playerTitle').innerText=document.getElementById('selectedTitle').innerText;
+  currentDirectUrl=null; currentIsMediaFile=false;
+  tryEmbedServers(0);
+}
+
+function tryEmbedServers(idx){
+  if(idx>=embedServers.length){ showIframe(embedServers[0](currentID)); return; }
+  const url=embedServers[idx](currentID);
+  // create iframe and listen for load; if load fails within timeout, try next
+  const iframe=document.createElement('iframe');
+  iframe.id='embedFrame'; iframe.src=url;
+  iframe.setAttribute('allow','autoplay; fullscreen; picture-in-picture'); iframe.allowFullscreen=true;
+  iframe.onload=()=>{ showElementInPlayer(iframe); };
+  document.getElementById('playerContainer').innerHTML=''; document.getElementById('playerContainer').appendChild(iframe);
+  // fallback timer: if not loaded in 6s, try next server
+  const t=setTimeout(()=>{ if(document.getElementById('embedFrame')===iframe) tryEmbedServers(idx+1); },6000);
+}
+
+function showIframe(url){
+  const iframe=document.createElement('iframe');
+  iframe.id='embedFrame'; iframe.src=url;
+  iframe.setAttribute('allow','autoplay; fullscreen; picture-in-picture'); iframe.allowFullscreen=true;
+  showElementInPlayer(iframe);
+}
+
+function showElementInPlayer(el){
+  const pc=document.getElementById('playerContainer'); pc.innerHTML=''; pc.appendChild(el);
+  currentDirectUrl=null; currentIsMediaFile=false;
+  document.getElementById('tryDownloadBtn').style.display='inline-block';
+}
+
+function loadSeasons(){
+  fetch(`https://api.themoviedb.org/3/tv/${currentID}?api_key=${API_KEY}`).then(r=>r.json()).then(data=>{
+    const s=document.getElementById('seasonSelect'); s.innerHTML='';
+    data.seasons.forEach(se=>{ if(se.season_number>0) s.innerHTML+=`<option value="${se.season_number}">Season ${se.season_number}</option>`; });
+    loadEpisodes();
+  });
+}
+
+function loadEpisodes(){
+  const season=document.getElementById('seasonSelect').value;
+  fetch(`https://api.themoviedb.org/3/tv/${currentID}/season/${season}?api_key=${API_KEY}`).then(r=>r.json()).then(data=>{
+    const e=document.getElementById('episodeSelect'); e.innerHTML='';
+    data.episodes.forEach(ep=> e.innerHTML+=`<option value="${ep.episode_number}">Episode ${ep.episode_number}</option>`);
+    loadPlayer();
+  });
+}
+
+function loadPlayer(){
+  const season=document.getElementById('seasonSelect').value;
+  const episode=document.getElementById('episodeSelect').value;
+  const url=`https://www.vidking.net/embed/tv/${currentID}/${season}/${episode}?autoPlay=true&nextEpisode=true&episodeSelector=true`;
+  const iframe=document.createElement('iframe');
+  iframe.id='embedFrame'; iframe.src=url;
+  iframe.setAttribute('allow','autoplay; fullscreen; picture-in-picture'); iframe.allowFullscreen=true;
+  showElementInPlayer(iframe);
+}
+
+function toggleFullscreen(){
+  const wrap=document.getElementById('playerWrap');
+  if(!document.fullscreenElement) wrap.requestFullscreen().catch(()=>{});
+  else document.exitFullscreen().catch(()=>{});
+}
+
+async function attemptDownload(){
+  if(currentDirectUrl){
+    // if direct URL known and CORS allows, create anchor download
+    const a=document.createElement('a'); a.href=currentDirectUrl; a.download='media';
+    document.body.appendChild(a); a.click(); a.remove();
+    return;
+  }
+  alert('Download requires a direct file URL that allows cross-origin requests. Use the audio panel to load a direct MP3 or host the file on a CORS-enabled server.');
+}
+
+function showAudioUploader(){ document.getElementById('audioPanel').style.display='block'; }
+
+function addSample(){ document.getElementById('audioUrl').value='https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'; loadAudio(); }
+
+async function loadAudio(){
+  const url=document.getElementById('audioUrl').value.trim(); if(!url) return alert('Enter an MP3 URL');
+  currentDirectUrl=url;
+  // quick CORS check by fetching HEAD
+  let corsOk=false;
+  try{
+    const res=await fetch(url,{method:'HEAD',mode:'cors'});
+    const ac=res.headers.get('access-control-allow-origin');
+    corsOk = res.ok && (ac==='*' || ac!==null);
+  }catch(e){ corsOk=false; }
+  const container=document.getElementById('audioContainer'); container.innerHTML='';
+  if(corsOk){
+    const audio=document.createElement('audio'); audio.controls=true; audio.src=url;
+    const dl=document.createElement('a'); dl.href=url; dl.download='track.mp3'; dl.textContent='Download MP3'; dl.style.marginLeft='12px';
+    container.appendChild(audio); container.appendChild(dl);
+    currentIsMediaFile=true;
+  } else {
+    // fallback: try to embed in iframe if direct streaming blocked
+    const iframe=document.createElement('iframe'); iframe.src=url; iframe.style.height='160px';
+    iframe.setAttribute('allow','autoplay; fullscreen'); container.appendChild(iframe);
+    currentIsMediaFile=false;
+  }
+}
+</script>
+</body>
+</html>
