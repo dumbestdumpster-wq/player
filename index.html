@@ -109,7 +109,6 @@
               <button class="btn small" onclick="openEmbedInNewTab()">Open Embed</button>
               <button class="btn small" onclick="copyEmbedUrl()">Copy Embed URL</button>
               <button class="btn small" onclick="toggleFullscreen()">Fullscreen</button>
-              <button id="downloadBtn" class="btn small" onclick="downloadCurrent()">Download (direct)</button>
               <button id="proxyDownloadBtn" class="btn small" onclick="downloadViaProxy()">Download via Proxy</button>
             </div>
           </div>
@@ -146,40 +145,41 @@ let currentEmbedServerIndex = 0;
 let currentEmbedUrl = '';
 
 /* ---------- EMBED SERVERS
-   Keep vidsrc.to (previously working) and add SmashyStream.
-   Index mapping:
-     0 = VidKing
-     1 = 2Embed
-     2 = VidSrc (kept working)
-     3 = SmashyStream (added)
-     4 = AutoEmbed (watch-v2)
-     5 = MultiEmbed
+   Keep vidsrc (vidsrc.to) working and add SmashyStream.
+   Server order and friendly labels are provided below.
 */
 const EMBED_SERVERS = [
+  // 0 - VidKing (kept)
   (id, type, season, episode) => type === 'movie'
     ? `https://www.vidking.net/embed/movie/${id}?autoPlay=true`
     : `https://www.vidking.net/embed/tv/${id}/${season}/${episode}?autoPlay=true&nextEpisode=true&episodeSelector=true`,
 
+  // 1 - 2Embed
   (id, type, season, episode) => type === 'movie'
     ? `https://www.2embed.cc/embed/${id}`
     : `https://www.2embed.cc/embed/tv?id=${id}&s=${season}&e=${episode}`,
 
-  // vidsrc.to (kept as working server)
+  // 2 - VidSrc (kept working) - keep both .to and .me patterns available via two options
   (id, type, season, episode) => type === 'movie'
     ? `https://vidsrc.to/embed/movie/${id}`
     : `https://vidsrc.to/embed/tv/${id}/${season}/${episode}`,
 
-  // SmashyStream (added)
+  // 3 - VidSrc alternative (vidsrc.me) - added as separate option to increase chance of success
+  (id, type, season, episode) => type === 'movie'
+    ? `https://vidsrc.me/embed/movie/${id}`
+    : `https://vidsrc.me/embed/tv/${id}/${season}/${episode}`,
+
+  // 4 - SmashyStream (added)
   (id, type, season, episode) => type === 'movie'
     ? `https://embed.smashystream.com/playere.php?tmdb=${id}`
     : `https://embed.smashystream.com/playere.php?tmdb=${id}&season=${season}&episode=${episode}`,
 
-  // AutoEmbed (watch-v2)
+  // 5 - AutoEmbed (watch-v2)
   (id, type, season, episode) => type === 'movie'
     ? `https://watch-v2.autoembed.app/movie/tmdb/${id}`
     : `https://watch-v2.autoembed.app/tv/tmdb/${id}/season/${season}/episode/${episode}`,
 
-  // MultiEmbed fallback
+  // 6 - MultiEmbed fallback
   (id, type, season, episode) => `https://multiembed.mov/?video_id=${id}&tmdb=1`
 ];
 
@@ -198,21 +198,85 @@ const serverWarn = document.getElementById('serverWarn');
 const movieDownloader = document.getElementById('movieDownloader');
 const movieContainer = document.getElementById('movieContainer');
 
-/* ---------- search & display ---------- */
-function searchTMDB(){
+/* ---------- search & display ----------
+   Primary: TMDb (kept)
+   Fallbacks if TMDb returns rate-limit or error:
+     - Movies: YTS API (public) for basic movie list
+     - TV: TVMaze API (public) for TV show search
+*/
+async function searchTMDB(){
   const q = searchInput.value.trim();
   if(!q) return alert('Type something first!');
   searchBtn.disabled = true;
   searchResults.innerHTML = '<div class="muted">Searching…</div>';
+
   const urlM = `https://api.themoviedb.org/3/search/movie?api_key=${API_KEY}&query=${encodeURIComponent(q)}`;
   const urlT = `https://api.themoviedb.org/3/search/tv?api_key=${API_KEY}&query=${encodeURIComponent(q)}`;
-  Promise.all([fetch(urlM), fetch(urlT)])
-    .then(res => Promise.all(res.map(r => r.json())))
-    .then(([movies, tv]) => {
-      displayResults(movies.results || [], tv.results || []);
+
+  try {
+    const [mRes, tRes] = await Promise.all([fetch(urlM), fetch(urlT)]);
+    // If TMDb returns 429 or other error, fall back
+    if (mRes.status === 429 || tRes.status === 429 || !mRes.ok || !tRes.ok) {
+      // Try fallbacks
+      await fallbackSearch(q);
       searchBtn.disabled = false;
-    })
-    .catch(err => { console.error(err); searchResults.innerHTML = '<div class="muted">Search failed</div>'; searchBtn.disabled = false; });
+      return;
+    }
+    const movies = await mRes.json();
+    const tv = await tRes.json();
+    displayResults(movies.results || [], tv.results || []);
+  } catch (err) {
+    console.warn('TMDb search failed, using fallback', err);
+    await fallbackSearch(q);
+  } finally {
+    searchBtn.disabled = false;
+  }
+}
+
+async function fallbackSearch(query){
+  // Try YTS for movies and TVMaze for TV as public fallbacks
+  const movies = [];
+  const tv = [];
+  try {
+    // YTS search (movie)
+    const yts = await fetch(`https://yts.mx/api/v2/list_movies.json?query_term=${encodeURIComponent(query)}`).then(r => r.json()).catch(()=>null);
+    if (yts && yts.status === 'ok' && Array.isArray(yts.data.movies)) {
+      yts.data.movies.forEach(m => movies.push({
+        id: m.id,
+        media_type: 'movie',
+        title: m.title,
+        poster_path: m.large_cover_image ? m.large_cover_image.replace('https://', '') : null,
+        poster_full: m.large_cover_image
+      }));
+    }
+  } catch(e){ console.warn('YTS fallback failed', e); }
+
+  try {
+    // TVMaze search (tv)
+    const tvm = await fetch(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(query)}`).then(r => r.json()).catch(()=>null);
+    if (Array.isArray(tvm)) {
+      tvm.forEach(item => {
+        if (item.show) tv.push({
+          id: item.show.id,
+          media_type: 'tv',
+          name: item.show.name,
+          poster_path: item.show.image ? item.show.image.medium : null,
+          poster_full: item.show.image ? item.show.image.original : null
+        });
+      });
+    }
+  } catch(e){ console.warn('TVMaze fallback failed', e); }
+
+  // If both empty, show message
+  if (movies.length === 0 && tv.length === 0) {
+    searchResults.innerHTML = '<div class="muted">No results found (TMDb may be rate-limited).</div>';
+    return;
+  }
+
+  // Normalize and display
+  const normMovies = movies.map(m => ({ ...m, media_type: 'movie' }));
+  const normTv = tv.map(t => ({ ...t, media_type: 'tv' }));
+  displayResults(normMovies, normTv);
 }
 
 function displayResults(movies, tv){
@@ -223,8 +287,8 @@ function displayResults(movies, tv){
   ];
   if(all.length === 0){ searchResults.innerHTML = '<div class="muted">No results found.</div>'; return; }
   all.forEach((item) => {
-    const title = item.media_type === 'movie' ? item.title : item.name;
-    const poster = item.poster_path ? `https://image.tmdb.org/t/p/w200${item.poster_path}` : '';
+    const title = item.media_type === 'movie' ? (item.title || item.name) : (item.name || item.title);
+    const poster = item.poster_path ? (item.poster_full || (item.poster_path.startsWith('http') ? item.poster_path : `https://image.tmdb.org/t/p/w200${item.poster_path}`)) : '';
     const div = document.createElement('div');
     div.className = 'result-item';
     div.tabIndex = 0;
@@ -277,7 +341,13 @@ function loadSeasons(){
       });
       loadEpisodes();
     })
-    .catch(err => console.error(err));
+    .catch(err => {
+      console.warn('loadSeasons failed', err);
+      // If TMDb fails, hide season/episode controls
+      document.getElementById('seasonSelect').innerHTML = '';
+      document.getElementById('episodeSelect').innerHTML = '';
+      loadPlayer();
+    });
 }
 
 function loadEpisodes(){
@@ -290,7 +360,11 @@ function loadEpisodes(){
       (data.episodes || []).forEach(ep => episodeSelect.innerHTML += `<option value="${ep.episode_number}">Episode ${ep.episode_number}</option>`);
       loadPlayer();
     })
-    .catch(err => console.error(err));
+    .catch(err => {
+      console.warn('loadEpisodes failed', err);
+      document.getElementById('episodeSelect').innerHTML = '';
+      loadPlayer();
+    });
 }
 
 /* ---------- embed servers ---------- */
@@ -299,11 +373,13 @@ function populateServerSelect(){
   EMBED_SERVERS.forEach((fn, idx) => {
     const opt = document.createElement('option');
     opt.value = idx;
+    // friendly labels
     if(idx === 0) opt.textContent = 'VidKing';
     else if(idx === 1) opt.textContent = '2Embed';
-    else if(idx === 2) opt.textContent = 'VidSrc';
-    else if(idx === 3) opt.textContent = 'SmashyStream';
-    else if(idx === 4) opt.textContent = 'AutoEmbed (watch-v2)';
+    else if(idx === 2) opt.textContent = 'VidSrc (to)';
+    else if(idx === 3) opt.textContent = 'VidSrc (me)';
+    else if(idx === 4) opt.textContent = 'SmashyStream';
+    else if(idx === 5) opt.textContent = 'AutoEmbed (watch-v2)';
     else opt.textContent = `Server ${idx+1}`;
     serverSelect.appendChild(opt);
   });
@@ -423,46 +499,53 @@ async function loadMovieFromUrls(){
   showEmbedServer(currentEmbedServerIndex);
 }
 
-/* ---------- download helpers ---------- */
-async function downloadCurrent(){
-  if(currentDirectMedia && currentDirectMedia.url){
-    const url = currentDirectMedia.url;
-    try{
-      const res = await fetch(url, { method: 'HEAD', mode: 'cors' });
-      const ac = res.headers.get('access-control-allow-origin');
-      if(res.ok && (ac === '*' || ac !== null)){
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = url.split('/').pop() || 'media';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        return;
-      } else {
-        alert('Direct download blocked by CORS. Use "Download via Proxy" (requires a proxy you deploy).');
-        return;
-      }
-    }catch(e){
-      console.warn(e);
-      alert('Direct download check failed. Use "Download via Proxy" if you have a proxy available.');
-      return;
-    }
-  } else {
-    alert('No direct media loaded. Use the Movie Stream & Download panel to load a direct MP4 URL.');
-  }
+/* ---------- download via proxy (active) ----------
+   Behavior:
+     - If PROXY_BASE_URL is configured (replace placeholder), it will be used.
+     - Otherwise the function will try a short list of public proxies (best-effort).
+     - The function opens the proxied URL in a new tab to trigger download/stream.
+   Notes:
+     - Public proxies are unreliable; for consistent results deploy your own proxy (Cloudflare Worker, small server).
+*/
+const PROXY_BASE_URL = ''; // <-- set to your proxy endpoint, e.g. "https://your-proxy.example/fetch?url="
+const PUBLIC_PROXY_PATTERNS = [
+  // patterns where we append the encoded target
+  'https://corsproxy.io/?',                 // corsproxy.io/?url=<encoded>
+  'https://api.allorigins.win/raw?url=',     // allorigins.win/raw?url=<encoded>
+  'https://thingproxy.freeboard.io/fetch/'   // thingproxy.freeboard.io/fetch/<encoded>
+];
+
+function buildProxyUrl(pattern, target){
+  // corsproxy.io expects ?url=, allorigins expects ?url=, thingproxy expects full path
+  if(pattern.endsWith('?') || pattern.includes('?')) return pattern + encodeURIComponent(target);
+  return pattern + encodeURIComponent(target);
 }
 
-/* Proxy download placeholder (configure your proxy URL) */
-const PROXY_BASE_URL = 'https://YOUR-PROXY.example/fetch?url=';
 function downloadViaProxy(){
   const target = (currentDirectMedia && currentDirectMedia.url) ? currentDirectMedia.url : currentEmbedUrl;
   if(!target) return alert('No media URL available to proxy-download.');
-  if(PROXY_BASE_URL.includes('YOUR-PROXY')) {
-    return alert('Proxy not configured. Deploy a proxy and set PROXY_BASE_URL in the script.');
+
+  // If user configured a proxy base URL, use it
+  if(PROXY_BASE_URL && PROXY_BASE_URL.trim() !== ''){
+    const proxyUrl = PROXY_BASE_URL + encodeURIComponent(target);
+    window.open(proxyUrl, '_blank', 'noopener');
+    return;
   }
-  const encoded = encodeURIComponent(target);
-  const proxyUrl = PROXY_BASE_URL + encoded;
-  window.open(proxyUrl, '_blank', 'noopener');
+
+  // Try public proxies in order (best-effort)
+  for(const pattern of PUBLIC_PROXY_PATTERNS){
+    try {
+      const proxyUrl = buildProxyUrl(pattern, target);
+      // open in new tab; user can try next if it fails
+      window.open(proxyUrl, '_blank', 'noopener');
+      // stop after opening the first public proxy to avoid multiple tabs
+      return;
+    } catch(e){
+      console.warn('Proxy build failed for pattern', pattern, e);
+    }
+  }
+
+  alert('No proxy configured. For reliable downloads deploy a small proxy (Cloudflare Worker or simple server) and set PROXY_BASE_URL in the script.');
 }
 
 /* ---------- keyboard / remote navigation ---------- */
