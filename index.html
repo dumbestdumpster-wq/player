@@ -21,7 +21,6 @@
   .small{padding:8px 10px;font-size:15px}
   .muted{color:#9aa0a6;font-size:13px}
   main{display:flex;gap:16px;margin-top:12px}
-  /* left column: search/results */
   .left{flex:0 0 360px;min-width:260px}
   .right{flex:1;min-width:320px}
   .panel{background:#0b0b0b;padding:12px;border-radius:10px;border:1px solid #222}
@@ -32,29 +31,23 @@
   }
   .result-item .meta{display:flex;align-items:center;gap:10px}
   .poster{width:64px;height:auto;border-radius:6px;flex-shrink:0}
-  /* focus styles for TV remotes and keyboard */
   .result-item:focus, .btn:focus, select:focus, #searchInput:focus, textarea:focus{
     outline:3px solid rgba(43,182,102,0.18);
     box-shadow:0 0 18px rgba(43,182,102,0.06);
   }
   .result-item:focus{transform:scale(1.01)}
-  /* player area */
   #playerWrap{display:none}
   #playerContainer{background:#000;border-radius:10px;padding:8px;border:1px solid #222}
   iframe, video{width:100%;height:56vh;border-radius:8px;background:#000;border:0}
-  /* controls row */
   .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
   .serverSelect{padding:10px;border-radius:10px;background:#111;border:1px solid #333;color:var(--text)}
-  /* movie downloader */
   textarea#movieUrls{min-height:56px;resize:vertical}
-  /* responsive */
   @media(max-width:900px){
     main{flex-direction:column}
     .left{width:100%;flex:unset}
     .right{width:100%}
     iframe,video{height:40vh}
   }
-  /* TV large targets */
   @media(min-width:1400px){
     :root{--touch:22px}
     .result-item{padding:18px;font-size:18px}
@@ -62,9 +55,9 @@
     #searchInput{font-size:18px;padding:14px}
     .btn{padding:12px 16px}
   }
-  /* small helper */
   .mutedSmall{color:#9aa0a6;font-size:13px;margin-top:8px}
   .hidden{display:none}
+  .warn{color:#ffb86b;font-weight:600;margin-top:8px}
 </style>
 </head>
 <body>
@@ -108,6 +101,7 @@
             <div>
               <strong id="playerTitle"></strong>
               <div id="serverStatus" class="muted" style="margin-top:4px"></div>
+              <div id="serverWarn" class="warn hidden">This server may be blocked or slow. Try another server if playback fails.</div>
             </div>
             <div class="controls" role="toolbar" aria-label="Player controls">
               <label class="muted" for="serverSelect">Server</label>
@@ -151,7 +145,16 @@ let currentDirectMedia = null;
 let currentEmbedServerIndex = 0;
 let currentEmbedUrl = '';
 
-/* embed servers (VidKing first, autoembed updated) */
+/* ---------- EMBED SERVERS
+   Keep vidsrc.to (previously working) and add SmashyStream.
+   Index mapping:
+     0 = VidKing
+     1 = 2Embed
+     2 = VidSrc (kept working)
+     3 = SmashyStream (added)
+     4 = AutoEmbed (watch-v2)
+     5 = MultiEmbed
+*/
 const EMBED_SERVERS = [
   (id, type, season, episode) => type === 'movie'
     ? `https://www.vidking.net/embed/movie/${id}?autoPlay=true`
@@ -161,14 +164,22 @@ const EMBED_SERVERS = [
     ? `https://www.2embed.cc/embed/${id}`
     : `https://www.2embed.cc/embed/tv?id=${id}&s=${season}&e=${episode}`,
 
+  // vidsrc.to (kept as working server)
   (id, type, season, episode) => type === 'movie'
     ? `https://vidsrc.to/embed/movie/${id}`
     : `https://vidsrc.to/embed/tv/${id}/${season}/${episode}`,
 
+  // SmashyStream (added)
+  (id, type, season, episode) => type === 'movie'
+    ? `https://embed.smashystream.com/playere.php?tmdb=${id}`
+    : `https://embed.smashystream.com/playere.php?tmdb=${id}&season=${season}&episode=${episode}`,
+
+  // AutoEmbed (watch-v2)
   (id, type, season, episode) => type === 'movie'
     ? `https://watch-v2.autoembed.app/movie/tmdb/${id}`
     : `https://watch-v2.autoembed.app/tv/tmdb/${id}/season/${season}/episode/${episode}`,
 
+  // MultiEmbed fallback
   (id, type, season, episode) => `https://multiembed.mov/?video_id=${id}&tmdb=1`
 ];
 
@@ -183,6 +194,7 @@ const playerContainer = document.getElementById('playerContainer');
 const playerTitle = document.getElementById('playerTitle');
 const serverSelect = document.getElementById('serverSelect');
 const serverStatus = document.getElementById('serverStatus');
+const serverWarn = document.getElementById('serverWarn');
 const movieDownloader = document.getElementById('movieDownloader');
 const movieContainer = document.getElementById('movieContainer');
 
@@ -210,7 +222,7 @@ function displayResults(movies, tv){
     ...tv.map(t => ({...t, media_type:'tv'}))
   ];
   if(all.length === 0){ searchResults.innerHTML = '<div class="muted">No results found.</div>'; return; }
-  all.forEach((item, idx) => {
+  all.forEach((item) => {
     const title = item.media_type === 'movie' ? item.title : item.name;
     const poster = item.poster_path ? `https://image.tmdb.org/t/p/w200${item.poster_path}` : '';
     const div = document.createElement('div');
@@ -222,7 +234,6 @@ function displayResults(movies, tv){
     div.onkeydown = (e) => { if(e.key === 'Enter') selectItem(item.id, item.media_type, title); };
     searchResults.appendChild(div);
   });
-  // focus first result for remote/keyboard users
   const first = searchResults.querySelector('.result-item');
   if(first) first.focus();
 }
@@ -235,24 +246,21 @@ function selectItem(id, type, title){
   selectorArea.setAttribute('aria-hidden','false');
   playerWrap.style.display = 'block';
   playerWrap.setAttribute('aria-hidden','false');
-  // hide results but keep search input visible
   searchResults.style.display = 'none';
   showResultsBtn.classList.remove('hidden');
-  // reset direct media
   currentDirectMedia = null;
   currentEmbedServerIndex = 0;
   currentEmbedUrl = '';
   populateServerSelect();
+  serverWarn.classList.add('hidden');
   if(type === 'movie') loadMoviePlayer();
   else loadSeasons();
-  // move focus to server select for TV/remote convenience
   setTimeout(()=> serverSelect.focus(), 200);
 }
 
 function showResults(){
   searchResults.style.display = '';
   showResultsBtn.classList.add('hidden');
-  // focus first result
   const first = searchResults.querySelector('.result-item');
   if(first) first.focus();
 }
@@ -291,7 +299,12 @@ function populateServerSelect(){
   EMBED_SERVERS.forEach((fn, idx) => {
     const opt = document.createElement('option');
     opt.value = idx;
-    opt.textContent = idx === 3 ? `AutoEmbed (watch-v2)` : `Server ${idx+1}`;
+    if(idx === 0) opt.textContent = 'VidKing';
+    else if(idx === 1) opt.textContent = '2Embed';
+    else if(idx === 2) opt.textContent = 'VidSrc';
+    else if(idx === 3) opt.textContent = 'SmashyStream';
+    else if(idx === 4) opt.textContent = 'AutoEmbed (watch-v2)';
+    else opt.textContent = `Server ${idx+1}`;
     serverSelect.appendChild(opt);
   });
   serverSelect.value = currentEmbedServerIndex;
@@ -300,6 +313,7 @@ function populateServerSelect(){
 
 function onServerChange(){
   currentEmbedServerIndex = parseInt(serverSelect.value, 10);
+  serverWarn.classList.add('hidden');
   if(!currentDirectMedia){
     const season = document.getElementById('seasonSelect') ? document.getElementById('seasonSelect').value : 1;
     const episode = document.getElementById('episodeSelect') ? document.getElementById('episodeSelect').value : 1;
@@ -309,18 +323,39 @@ function onServerChange(){
   }
 }
 
+/* showEmbedServer: loads iframe and performs a non-intrusive load check.
+   If iframe onload doesn't fire within 8s, show a warning but DO NOT auto-switch.
+*/
 function showEmbedServer(index, season = 1, episode = 1){
   const url = EMBED_SERVERS[index](currentID, currentType, season, episode);
   currentEmbedUrl = url;
   playerContainer.innerHTML = '';
+  serverWarn.classList.add('hidden');
+  serverStatus.innerText = `Using server ${index+1} — loading...`;
   const iframe = document.createElement('iframe');
   iframe.src = url;
   iframe.id = 'embedFrame';
   iframe.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture');
   iframe.allowFullscreen = true;
-  iframe.onload = () => setServerStatus(`Using server ${index+1}`);
+
+  let loaded = false;
+  const onLoad = () => {
+    loaded = true;
+    serverStatus.innerText = `Using server ${index+1}`;
+    serverWarn.classList.add('hidden');
+    iframe.removeEventListener('load', onLoad);
+    clearTimeout(timeoutCheck);
+  };
+  iframe.addEventListener('load', onLoad);
+
+  const timeoutCheck = setTimeout(() => {
+    if(!loaded){
+      serverStatus.innerText = `Using server ${index+1} — load may be blocked`;
+      serverWarn.classList.remove('hidden');
+    }
+  }, 8000);
+
   playerContainer.appendChild(iframe);
-  setServerStatus(`Using server ${index+1}`);
 }
 
 /* ---------- player controls ---------- */
@@ -433,7 +468,6 @@ function downloadViaProxy(){
 /* ---------- keyboard / remote navigation ---------- */
 document.addEventListener('keydown', (e) => {
   const active = document.activeElement;
-  // Up/Down navigate results when results visible
   if(searchResults.style.display !== 'none' && (e.key === 'ArrowDown' || e.key === 'ArrowUp')){
     e.preventDefault();
     const items = Array.from(searchResults.querySelectorAll('.result-item'));
@@ -444,7 +478,6 @@ document.addEventListener('keydown', (e) => {
     else idx = Math.max(0, idx - 1);
     items[idx].focus();
   }
-  // Left/Right change server when serverSelect focused or player visible
   if((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && document.activeElement === serverSelect){
     e.preventDefault();
     const dir = e.key === 'ArrowRight' ? 1 : -1;
@@ -452,7 +485,6 @@ document.addEventListener('keydown', (e) => {
     serverSelect.value = next;
     onServerChange();
   }
-  // Escape reopens results if hidden
   if(e.key === 'Escape'){
     if(searchResults.style.display === 'none') showResults();
   }
@@ -464,7 +496,6 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;',
 /* ---------- init ---------- */
 document.addEventListener('DOMContentLoaded', () => {
   populateServerSelect();
-  // keep search input focused for quick typing on TV/mobile
   setTimeout(()=> searchInput.focus(), 200);
 });
 </script>
