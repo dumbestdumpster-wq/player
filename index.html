@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>TMDb + Multi-Server Player</title>
+<title>TMDb + Multi-Server Player (with download helpers)</title>
 <style>
   :root{--bg:#0d0d0d;--panel:#111;--muted:#1a1a1a;--accent:#2b6}
   body{background:var(--bg);color:#e6e6e6;font-family:Arial,Helvetica,sans-serif;margin:0;padding:20px}
@@ -20,12 +20,14 @@
   .controls{display:flex;gap:8px;margin-top:8px;align-items:center}
   .small{padding:6px 8px;font-size:14px}
   .muted{color:#aaa;font-size:13px}
+  .progress{height:8px;background:#222;border-radius:6px;overflow:hidden;margin-top:8px}
+  .progress > i{display:block;height:100%;background:linear-gradient(90deg,#2b6,#0b3);width:0%}
   @media(max-width:800px){iframe,video{height:320px}}
 </style>
 </head>
 <body>
 <div class="container">
-  <h2>🎬 TMDb + Multi-Server Player</h2>
+  <h2>🎬 TMDb + Multi-Server Player (with download helpers)</h2>
 
   <label><strong>Search (movies & TV)</strong></label>
   <input id="searchInput" placeholder="Search movies or TV shows..." />
@@ -53,12 +55,19 @@
       <div class="controls">
         <label class="muted" style="margin-right:8px">Server</label>
         <select id="serverSelect" onchange="onServerChange()" class="small"></select>
+        <button onclick="openEmbedInNewTab()" class="small">Open Embed</button>
+        <button onclick="copyEmbedUrl()" class="small">Copy Embed URL</button>
         <button onclick="toggleFullscreen()" class="small">Fullscreen</button>
         <button id="downloadBtn" onclick="downloadCurrent()" class="small">Download</button>
+        <button id="fetchSaveBtn" onclick="fetchAndSaveCurrent()" class="small">Fetch & Save</button>
       </div>
     </div>
 
     <div id="playerContainer" style="margin-top:12px"></div>
+    <div id="downloadProgress" style="display:none">
+      <div class="progress"><i id="progressBar"></i></div>
+      <div class="muted" id="progressText"></div>
+    </div>
   </div>
 
   <!-- Movie downloader panel -->
@@ -84,8 +93,9 @@ let currentID = null;
 let currentType = null;
 let currentDirectMedia = null; // {type:'video', url:'', corsOk:true/false}
 let currentEmbedServerIndex = 0;
+let currentEmbedUrl = ''; // last embed URL shown in iframe
 
-/* Embed server factories. VidKing kept intact as first entry. */
+/* Embed server factories (VidKing first, autoembed updated) */
 const EMBED_SERVERS = [
   (id, type, season, episode) => type === 'movie'
     ? `https://www.vidking.net/embed/movie/${id}?autoPlay=true`
@@ -99,9 +109,10 @@ const EMBED_SERVERS = [
     ? `https://vidsrc.to/embed/movie/${id}`
     : `https://vidsrc.to/embed/tv/${id}/${season}/${episode}`,
 
+  // AutoEmbed (watch-v2) integration
   (id, type, season, episode) => type === 'movie'
-    ? `https://autoembed.cc/movie/tmdb/${id}`
-    : `https://autoembed.cc/tv/tmdb/${id}/season/${season}/episode/${episode}`,
+    ? `https://watch-v2.autoembed.app/movie/tmdb/${id}`
+    : `https://watch-v2.autoembed.app/tv/tmdb/${id}/season/${season}/episode/${episode}`,
 
   (id, type, season, episode) => `https://multiembed.mov/?video_id=${id}&tmdb=1`
 ];
@@ -150,13 +161,13 @@ function selectItem(id, type, title){
   document.getElementById('playerTitle').innerText = title;
   currentDirectMedia = null;
   currentEmbedServerIndex = 0;
+  currentEmbedUrl = '';
   populateServerSelect();
   if(type === 'movie') loadMoviePlayer();
   else loadSeasons();
 }
 
 function loadMoviePlayer(){
-  // Use the server selected by the user (no automatic switching)
   showEmbedServer(currentEmbedServerIndex);
 }
 
@@ -167,191 +178,4 @@ function loadSeasons(){
       const seasonSelect = document.getElementById('seasonSelect');
       seasonSelect.innerHTML = '';
       (data.seasons || []).forEach(s => {
-        if(s.season_number > 0) seasonSelect.innerHTML += `<option value="${s.season_number}">Season ${s.season_number}</option>`;
-      });
-      loadEpisodes();
-    })
-    .catch(err => console.error(err));
-}
-
-function loadEpisodes(){
-  const season = document.getElementById('seasonSelect').value;
-  fetch(`https://api.themoviedb.org/3/tv/${currentID}/season/${season}?api_key=${API_KEY}`)
-    .then(r => r.json())
-    .then(data => {
-      const episodeSelect = document.getElementById('episodeSelect');
-      episodeSelect.innerHTML = '';
-      (data.episodes || []).forEach(ep => episodeSelect.innerHTML += `<option value="${ep.episode_number}">Episode ${ep.episode_number}</option>`);
-      loadPlayer();
-    })
-    .catch(err => console.error(err));
-}
-
-function loadPlayer(){
-  const season = document.getElementById('seasonSelect').value;
-  const episode = document.getElementById('episodeSelect').value;
-  showEmbedServer(currentEmbedServerIndex, season, episode);
-}
-
-/* -------------------------
-   Embed server handling (manual only)
-   ------------------------- */
-function populateServerSelect(){
-  const sel = document.getElementById('serverSelect');
-  sel.innerHTML = '';
-  EMBED_SERVERS.forEach((fn, idx) => {
-    const opt = document.createElement('option');
-    opt.value = idx;
-    opt.textContent = `Server ${idx+1}`;
-    sel.appendChild(opt);
-  });
-  sel.value = currentEmbedServerIndex;
-  setServerStatus(`Selected server ${parseInt(sel.value,10)+1}`);
-}
-
-function onServerChange(){
-  const sel = document.getElementById('serverSelect');
-  currentEmbedServerIndex = parseInt(sel.value, 10);
-  // If a direct video is playing, keep it; otherwise reload embed with chosen server
-  if(!currentDirectMedia) {
-    // For TV, preserve season/episode
-    const season = document.getElementById('seasonSelect') ? document.getElementById('seasonSelect').value : 1;
-    const episode = document.getElementById('episodeSelect') ? document.getElementById('episodeSelect').value : 1;
-    showEmbedServer(currentEmbedServerIndex, season, episode);
-  } else {
-    setServerStatus(`Selected server ${currentEmbedServerIndex+1} (direct media loaded; server used only for embeds)`);
-  }
-}
-
-function showEmbedServer(index, season = 1, episode = 1){
-  const url = EMBED_SERVERS[index](currentID, currentType, season, episode);
-  const container = document.getElementById('playerContainer');
-  container.innerHTML = '';
-  const iframe = document.createElement('iframe');
-  iframe.src = url;
-  iframe.id = 'embedFrame';
-  iframe.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture');
-  iframe.allowFullscreen = true;
-  iframe.onload = () => {
-    setServerStatus(`Using server ${index+1}`);
-  };
-  container.appendChild(iframe);
-  setServerStatus(`Using server ${index+1}`);
-}
-
-/* -------------------------
-   Fullscreen & download
-   ------------------------- */
-function toggleFullscreen(){
-  const wrap = document.getElementById('playerWrap');
-  if(!document.fullscreenElement) wrap.requestFullscreen().catch(()=>{});
-  else document.exitFullscreen().catch(()=>{});
-}
-
-function setServerStatus(text){
-  document.getElementById('serverStatus').innerText = text;
-}
-
-/* Download current media:
-   - If a direct media URL is loaded (currentDirectMedia), attempt direct download.
-   - Otherwise instruct user to use the Movie Stream & Download panel.
-*/
-async function downloadCurrent(){
-  if(currentDirectMedia && currentDirectMedia.url){
-    const url = currentDirectMedia.url;
-    try{
-      const res = await fetch(url, { method: 'HEAD', mode: 'cors' });
-      const ac = res.headers.get('access-control-allow-origin');
-      if(res.ok && (ac === '*' || ac !== null)){
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = url.split('/').pop() || 'media';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        return;
-      } else {
-        alert('Download blocked by CORS. Host the file on a CORS-enabled server (Access-Control-Allow-Origin: *).');
-        return;
-      }
-    }catch(e){
-      console.warn(e);
-      alert('Could not verify download availability. Use the Movie Stream & Download panel to load a direct MP4 URL.');
-      return;
-    }
-  } else {
-    alert('No direct media loaded. Use the Movie Stream & Download panel to load a direct MP4 URL for download.');
-  }
-}
-
-/* -------------------------
-   Movie downloader (direct MP4s)
-   ------------------------- */
-function toggleMovieDownloader(){
-  const p = document.getElementById('movieDownloader');
-  p.style.display = p.style.display === 'block' ? 'none' : 'block';
-}
-
-function clearMovieUrls(){
-  document.getElementById('movieUrls').value = '';
-  document.getElementById('movieContainer').innerHTML = '';
-  currentDirectMedia = null;
-}
-
-async function loadMovieFromUrls(){
-  const raw = document.getElementById('movieUrls').value.trim();
-  if(!raw) return alert('Enter at least one direct MP4 URL (comma-separated allowed).');
-  const urls = raw.split(',').map(s => s.trim()).filter(Boolean);
-  const container = document.getElementById('movieContainer');
-  container.innerHTML = 'Checking URLs...';
-  // Try each URL for CORS/playability; pick first that works
-  for(const url of urls){
-    try{
-      const res = await fetch(url, { method: 'HEAD', mode: 'cors' });
-      const ac = res.headers.get('access-control-allow-origin');
-      const contentType = res.headers.get('content-type') || '';
-      const ok = res.ok && (ac === '*' || ac !== null) && contentType.includes('video');
-      if(ok){
-        container.innerHTML = '';
-        const video = document.createElement('video');
-        video.controls = true;
-        video.src = url;
-        video.preload = 'metadata';
-        video.style.maxWidth = '100%';
-        const dl = document.createElement('a');
-        dl.href = url;
-        dl.download = url.split('/').pop() || 'movie.mp4';
-        dl.textContent = 'Download MP4';
-        dl.style.display = 'inline-block';
-        dl.style.marginTop = '8px';
-        container.appendChild(video);
-        container.appendChild(dl);
-        currentDirectMedia = { type: 'video', url, corsOk: true };
-        setServerStatus('Direct MP4 loaded (download available)');
-        return;
-      }
-    }catch(e){
-      console.warn('URL check failed', url, e);
-    }
-  }
-  // If none of the direct URLs worked, use the selected embed server (no automatic switching)
-  container.innerHTML = 'No direct MP4 with CORS found. Using selected embed server.';
-  currentDirectMedia = null;
-  showEmbedServer(currentEmbedServerIndex);
-}
-
-/* -------------------------
-   Utilities
-   ------------------------- */
-function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-
-/* -------------------------
-   Initialize server select on load
-   ------------------------- */
-document.addEventListener('DOMContentLoaded', () => {
-  populateServerSelect();
-  document.getElementById('downloadBtn').style.display = 'inline-block';
-});
-</script>
-</body>
-</html>
+        if(s.season_number > 0) seasonSelect.innerHTML += `<option value="${s.season_number}">Season ${s.season
