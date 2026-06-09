@@ -1,217 +1,202 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Ultimate TMDb Player</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8">
+<title>My Personal Streaming Hub</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <style>
+<style>
     body {
-      background: #0d0d0d;
-      color: #e6e6e6;
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 20px;
+        margin: 0;
+        background: #0d0d0d;
+        color: white;
+        font-family: Arial, sans-serif;
     }
 
-    .container {
-      max-width: 750px;
-      margin: auto;
-      background: #111;
-      padding: 20px;
-      border-radius: 12px;
-      border: 1px solid #222;
+    header {
+        padding: 15px;
+        background: #111;
+        display: flex;
+        gap: 10px;
     }
 
     input {
-      width: 100%;
-      padding: 12px;
-      margin-top: 8px;
-      margin-bottom: 15px;
-      background: #1a1a1a;
-      color: #eee;
-      border: 1px solid #333;
-      border-radius: 6px;
-      font-size: 16px;
+        flex: 1;
+        padding: 10px;
+        border-radius: 6px;
+        border: none;
+        background: #222;
+        color: white;
     }
 
-    button, select {
-      padding: 12px 18px;
-      font-size: 16px;
-      border: none;
-      border-radius: 6px;
-      background: #333;
-      color: white;
-      cursor: pointer;
-      transition: 0.2s;
-      width: 100%;
-      margin-bottom: 10px;
+    button {
+        padding: 10px 15px;
+        background: #444;
+        border: none;
+        border-radius: 6px;
+        color: white;
+        cursor: pointer;
     }
 
     button:hover {
-      background: #444;
+        background: #666;
     }
 
-    .result-item {
-      cursor: pointer;
-      margin-bottom: 15px;
-      padding: 12px;
-      border: 1px solid #333;
-      border-radius: 8px;
-      background: #1a1a1a;
-      transition: 0.2s;
+    #results {
+        padding: 20px;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 15px;
     }
 
-    .result-item:hover {
-      background: #222;
+    .item {
+        cursor: pointer;
+        background: #1a1a1a;
+        padding: 10px;
+        border-radius: 8px;
+        text-align: center;
     }
 
-    img {
-      border-radius: 8px;
-      margin-top: 10px;
-      border: 1px solid #333;
+    .item img {
+        width: 100%;
+        border-radius: 6px;
+    }
+
+    #player-container {
+        width: 100%;
+        height: 70vh;
+        background: black;
+        position: relative;
     }
 
     iframe {
-      width: 100%;
-      height: 600px;
-      border: 1px solid #333;
-      border-radius: 8px;
-      background: black;
+        width: 100%;
+        height: 100%;
+        border: none;
+    }
+
+    #fullscreenBtn {
+        position: absolute;
+        bottom: 15px;
+        right: 15px;
+        background: rgba(0,0,0,0.6);
+        padding: 10px 15px;
+        border-radius: 6px;
+        cursor: pointer;
+        color: white;
+        font-size: 14px;
     }
 
     #serverSelect {
-      margin-top: 10px;
+        margin: 10px;
+        padding: 10px;
+        background: #222;
+        color: white;
+        border-radius: 6px;
+        border: none;
     }
-  </style>
+</style>
 </head>
 
 <body>
-<div class="container">
-  <h2>🎬 Ultimate TMDb Player</h2>
 
-  <input id="searchInput" type="text" placeholder="Search movies or TV shows...">
-  <button onclick="searchTMDB()">Search</button>
+<header>
+    <input id="searchInput" placeholder="Search movies or TV shows…">
+    <button onclick="searchTMDB()">Search</button>
+</header>
 
-  <div id="searchResults" style="margin-top:20px;"></div>
-
-  <select id="serverSelect" onchange="reloadPlayer()" style="display:none;">
-    <option value="vidking">VidKing (Recommended)</option>
-    <option value="vidsrc">VidSrc</option>
+<select id="serverSelect" onchange="reloadServer()">
+    <option value="vidking">VidKing (Primary)</option>
     <option value="2embed">2Embed</option>
-    <option value="multiembed">MultiEmbed</option>
-    <option value="autoembed">AutoEmbed</option>
-  </select>
+</select>
 
-  <div id="playerContainer" style="margin-top:20px;"></div>
+<div id="player-container">
+    <iframe id="player"
+        allow="autoplay; fullscreen; picture-in-picture"
+        allowfullscreen
+        webkitallowfullscreen
+        mozallowfullscreen>
+    </iframe>
+
+    <div id="fullscreenBtn" onclick="toggleFullscreen()">Fullscreen</div>
 </div>
 
+<div id="results"></div>
+
 <script>
-const API_KEY = "3ca5f3df3ee394337393273aa440c425";
+const TMDB_KEY = "3ca5f3df3ee394337393273aa440c425";
 
 let currentID = null;
-let currentType = null;
+let currentType = "movie";
+let currentSeason = 1;
+let currentEpisode = 1;
 
-// -------------------------
-// SEARCH TMDB
-// -------------------------
 function searchTMDB() {
-  const query = document.getElementById("searchInput").value;
-  if (!query) return alert("Type something first!");
+    const q = document.getElementById("searchInput").value;
+    if (!q) return;
 
-  const urlMovie = `https://api.themoviedb.org/3/search/movie?api_key=${API_KEY}&query=${encodeURIComponent(query)}`;
-  const urlTV = `https://api.themoviedb.org/3/search/tv?api_key=${API_KEY}&query=${encodeURIComponent(query)}`;
+    fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(q)}`)
+        .then(r => r.json())
+        .then(data => {
+            const results = document.getElementById("results");
+            results.innerHTML = "";
 
-  Promise.all([fetch(urlMovie), fetch(urlTV)])
-    .then(responses => Promise.all(responses.map(r => r.json())))
-    .then(([movies, tv]) => displayResults(movies.results, tv.results));
+            data.results.forEach(item => {
+                if (!item.poster_path) return;
+
+                const div = document.createElement("div");
+                div.className = "item";
+                div.innerHTML = `
+                    <img src="https://image.tmdb.org/t/p/w300${item.poster_path}">
+                    <p>${item.title || item.name}</p>
+                `;
+
+                div.onclick = () => {
+                    currentID = item.id;
+                    currentType = item.media_type;
+                    loadPlayer();
+                };
+
+                results.appendChild(div);
+            });
+        });
 }
 
-// -------------------------
-// DISPLAY RESULTS
-// -------------------------
-function displayResults(movies, tv) {
-  const container = document.getElementById("searchResults");
-  container.innerHTML = "<h3>Results:</h3>";
+function loadPlayer() {
+    const server = document.getElementById("serverSelect").value;
+    const iframe = document.getElementById("player");
 
-  const all = [
-    ...movies.map(m => ({...m, media_type: "movie"})),
-    ...tv.map(t => ({...t, media_type: "tv"}))
-  ];
+    let src = "";
 
-  if (all.length === 0) {
-    container.innerHTML = "<p>No results found.</p>";
-    return;
-  }
-
-  all.forEach(item => {
-    const title = item.media_type === "movie" ? item.title : item.name;
-    const poster = item.poster_path ? `https://image.tmdb.org/t/p/w200${item.poster_path}` : "";
-
-    container.innerHTML += `
-      <div class="result-item" onclick="selectItem(${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}')">
-        <strong>${title}</strong> (${item.media_type.toUpperCase()})<br>
-        ${poster ? `<img src="${poster}">` : ""}
-      </div>
-    `;
-  });
-}
-
-// -------------------------
-// SELECT ITEM
-// -------------------------
-function selectItem(id, type, title) {
-  currentID = id;
-  currentType = type;
-
-  // Hide results but keep search bar
-  document.getElementById("searchResults").style.display = "none";
-
-  // Show server selector
-  document.getElementById("serverSelect").style.display = "block";
-
-  reloadPlayer();
-}
-
-// -------------------------
-// BUILD STREAM URLS
-// -------------------------
-function getStreamURL(server) {
-  if (currentType === "movie") {
-    switch(server) {
-      case "vidsrc": return `https://vidsrc.to/embed/movie/${currentID}`;
-      case "2embed": return `https://www.2embed.cc/embed/${currentID}`;
-      case "multiembed": return `https://multiembed.mov/?video_id=${currentID}&tmdb=1`;
-      case "autoembed": return `https://watch-v2.autoembed.app/movie/tmdb/${currentID}`;
-      default: return `https://www.vidking.net/embed/movie/${currentID}?autoPlay=true`;
+    if (currentType === "tv") {
+        if (server === "vidking") {
+            src = `https://www.vidking.net/embed/tv/${currentID}/${currentSeason}/${currentEpisode}`;
+        } else if (server === "2embed") {
+            src = `https://www.2embed.cc/embedtv/${currentID}&s=${currentSeason}&e=${currentEpisode}`;
+        }
+    } else {
+        if (server === "vidking") {
+            src = `https://www.vidking.net/embed/movie/${currentID}`;
+        } else if (server === "2embed") {
+            src = `https://www.2embed.cc/embed/${currentID}`;
+        }
     }
-  }
 
-  // TV SHOWS — VidKing handles episodes internally
-  switch(server) {
-    case "vidsrc": return `https://vidsrc.to/embed/tv/${currentID}/1/1`;
-    case "2embed": return `https://www.2embed.cc/embed/tv?id=${currentID}&s=1&e=1`;
-    case "multiembed": return `https://multiembed.mov/?video_id=${currentID}&tmdb=1`;
-    case "autoembed": return `https://watch-v2.autoembed.app/tv/tmdb/${currentID}/season/1/episode/1`;
-    default: return `https://www.vidking.net/embed/tv/${currentID}/1/1?autoPlay=true&episodeSelector=true`;
-  }
+    iframe.src = src;
 }
 
-// -------------------------
-// LOAD PLAYER
-// -------------------------
-function reloadPlayer() {
-  const server = document.getElementById("serverSelect").value;
-  const url = getStreamURL(server);
+function reloadServer() {
+    if (currentID) loadPlayer();
+}
 
-  document.getElementById("playerContainer").innerHTML = `
-    <iframe 
-      src="${url}"
-      allow="autoplay; fullscreen; picture-in-picture"
-      allowfullscreen
-      webkitallowfullscreen
-      mozallowfullscreen>
-    </iframe>
-  `;
+function toggleFullscreen() {
+    const container = document.getElementById("player-container");
+
+    if (!document.fullscreenElement) {
+        container.requestFullscreen().catch(err => console.log(err));
+    } else {
+        document.exitFullscreen();
+    }
 }
 </script>
 
