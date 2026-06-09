@@ -2,42 +2,62 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" /><!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>TMDb Multi-Server Player — Movies & TV</title>
+<title>TMDb + Multi-Server Player (mobile & TV friendly)</title>
 <style>
-  :root{--bg:#0d0d0d;--panel:#111;--muted:#1a1a1a;--accent:#2b6;--text:#e6e6e6}
+  :root{
+    --bg:#0d0d0d; --panel:#111; --muted:#1a1a1a; --accent:#2b6; --text:#e6e6e6;
+    --touch:18px; --pad:14px; --radius:10px;
+  }
   html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,Arial,sans-serif}
   .container{max-width:1200px;margin:12px auto;padding:16px;border-radius:12px;background:var(--panel);border:1px solid #222}
-  header{display:flex;align-items:center;gap:12px}
+  header{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
   h1{font-size:20px;margin:0}
-  .searchRow{display:flex;gap:8px;width:100%;align-items:center;margin-top:12px}
+  .searchRow{display:flex;gap:8px;width:100%;align-items:center}
   #searchInput{flex:1;padding:12px;border-radius:10px;border:1px solid #333;background:var(--muted);color:var(--text);font-size:16px}
-  button,select,textarea{font-size:16px}
+  button, select, textarea{font-size:16px}
   .btn{background:#222;color:var(--text);border:1px solid #333;padding:10px 12px;border-radius:10px;cursor:pointer}
+  .btn:active{transform:translateY(1px)}
   .small{padding:8px 10px;font-size:15px}
+  .muted{color:#9aa0a6;font-size:13px}
   main{display:flex;gap:16px;margin-top:12px}
   .left{flex:0 0 360px;min-width:260px}
   .right{flex:1;min-width:320px}
   .panel{background:#0b0b0b;padding:12px;border-radius:10px;border:1px solid #222}
   #searchResults{margin-top:10px;max-height:60vh;overflow:auto;padding-right:6px}
-  .result-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;border-radius:10px;background:var(--muted);margin-bottom:10px;border:1px solid #222;cursor:pointer}
+  .result-item{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;border-radius:10px;background:var(--muted);
+    margin-bottom:10px;border:1px solid #222;cursor:pointer;font-size:16px;
+  }
+  .result-item .meta{display:flex;align-items:center;gap:10px}
   .poster{width:64px;height:auto;border-radius:6px;flex-shrink:0}
-  .result-item:focus,.btn:focus,select:focus,#searchInput:focus,textarea:focus{outline:3px solid rgba(43,182,102,0.18);box-shadow:0 0 18px rgba(43,182,102,0.06)}
+  .result-item:focus, .btn:focus, select:focus, #searchInput:focus, textarea:focus{
+    outline:3px solid rgba(43,182,102,0.18);
+    box-shadow:0 0 18px rgba(43,182,102,0.06);
+  }
+  .result-item:focus{transform:scale(1.01)}
   #playerWrap{display:none}
   #playerContainer{background:#000;border-radius:10px;padding:8px;border:1px solid #222}
-  iframe,video{width:100%;height:56vh;border-radius:8px;background:#000;border:0}
+  iframe, video{width:100%;height:56vh;border-radius:8px;background:#000;border:0}
   .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
   .serverSelect{padding:10px;border-radius:10px;background:#111;border:1px solid #333;color:var(--text)}
   textarea#movieUrls{min-height:56px;resize:vertical}
-  .muted{color:#9aa0a6;font-size:13px}
+  @media(max-width:900px){
+    main{flex-direction:column}
+    .left{width:100%;flex:unset}
+    .right{width:100%}
+    iframe,video{height:40vh}
+  }
+  @media(min-width:1400px){
+    :root{--touch:22px}
+    .result-item{padding:18px;font-size:18px}
+    .poster{width:90px}
+    #searchInput{font-size:18px;padding:14px}
+    .btn{padding:12px 16px}
+  }
   .mutedSmall{color:#9aa0a6;font-size:13px;margin-top:8px}
   .hidden{display:none}
   .warn{color:#ffb86b;font-weight:600;margin-top:8px}
-  @media(max-width:900px){main{flex-direction:column}iframe,video{height:40vh}}
 </style>
 </head>
 <body>
@@ -47,137 +67,120 @@
     <div style="margin-left:auto" class="muted">Mobile & TV friendly</div>
   </header>
 
-  <div class="searchRow">
-    <input id="searchInput" type="search" placeholder="Search movies or TV shows..." aria-label="Search" />
-    <button id="searchBtn" class="btn small" onclick="searchTMDB()">Search</button>
-    <button id="showResultsBtn" class="btn small hidden" onclick="showResults()">Show results</button>
-    <button id="toggleDownloaderBtn" class="btn small" onclick="toggleMovieDownloader()">Movie Stream & Download</button>
+  <div class="panel" style="margin-top:12px">
+    <div class="searchRow">
+      <input id="searchInput" type="search" placeholder="Search movies or TV shows..." aria-label="Search" />
+      <button id="searchBtn" class="btn small" onclick="searchTMDB()">Search</button>
+      <button id="showResultsBtn" class="btn small hidden" onclick="showResults()">Show results</button>
+      <button id="toggleDownloaderBtn" class="btn small" onclick="toggleMovieDownloader()">Movie Stream & Download</button>
+    </div>
+
+    <main>
+      <div class="left">
+        <div id="searchResults" tabindex="0" aria-live="polite"></div>
+        <div class="mutedSmall">Use <strong>Up/Down</strong> and <strong>Enter</strong> to navigate; <strong>Escape</strong> to reopen results.</div>
+      </div>
+
+      <div class="right">
+        <div id="selectorArea" class="panel hidden" aria-hidden="true">
+          <h2 id="selectedTitle" style="margin:0 0 8px 0;font-size:18px"></h2>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <div style="flex:1;min-width:120px">
+              <label class="muted">Season</label>
+              <select id="seasonSelect" class="serverSelect" onchange="loadEpisodes()"></select>
+            </div>
+            <div style="flex:1;min-width:120px">
+              <label class="muted">Episode</label>
+              <select id="episodeSelect" class="serverSelect" onchange="loadPlayer()"></select>
+            </div>
+          </div>
+        </div>
+
+        <div id="playerWrap" class="panel" aria-hidden="true">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <strong id="playerTitle"></strong>
+              <div id="serverStatus" class="muted" style="margin-top:4px"></div>
+              <div id="serverWarn" class="warn hidden">This server may be blocked or slow. Try another server if playback fails.</div>
+            </div>
+            <div class="controls" role="toolbar" aria-label="Player controls">
+              <label class="muted" for="serverSelect">Server</label>
+              <select id="serverSelect" class="serverSelect" onchange="onServerChange()" aria-label="Choose server"></select>
+              <button class="btn small" onclick="openEmbedInNewTab()">Open Embed</button>
+              <button class="btn small" onclick="copyEmbedUrl()">Copy Embed URL</button>
+              <button class="btn small" onclick="toggleFullscreen()">Fullscreen</button>
+              <button id="downloadBtn" class="btn small" onclick="downloadCurrent()">Download (direct)</button>
+              <button id="proxyDownloadBtn" class="btn small" onclick="downloadViaProxy()">Download via Proxy</button>
+            </div>
+          </div>
+
+          <div id="playerContainer" style="margin-top:12px"></div>
+        </div>
+
+        <div id="movieDownloader" class="panel hidden" style="margin-top:12px">
+          <h3 style="margin-top:0">🎞️ Movie Stream & Download</h3>
+          <label class="muted">Direct MP4 URL (comma-separated mirrors allowed)</label>
+          <textarea id="movieUrls" placeholder="https://cdn1.example.com/movie.mp4, https://mirror.example.com/movie.mp4"></textarea>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn small" onclick="loadMovieFromUrls()">Load MP4(s)</button>
+            <button class="btn small" onclick="clearMovieUrls()">Clear</button>
+          </div>
+          <div id="movieContainer" style="margin-top:12px"></div>
+          <div class="mutedSmall">If direct MP4s are not available or CORS blocks playback/download, the selected embed server will be used.</div>
+        </div>
+
+      </div>
+    </main>
   </div>
-
-  <main style="margin-top:12px">
-    <div class="left panel">
-      <div id="searchResults" tabindex="0" aria-live="polite"></div>
-      <div class="mutedSmall">Use Up/Down and Enter to navigate; Escape to reopen results.</div>
-    </div>
-
-    <div class="right">
-      <div id="selectorArea" class="panel hidden" aria-hidden="true">
-        <h2 id="selectedTitle" style="margin:0 0 8px 0;font-size:18px"></h2>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <div style="flex:1;min-width:120px">
-            <label class="muted">Season</label>
-            <select id="seasonSelect" class="serverSelect" onchange="loadEpisodes()"></select>
-          </div>
-          <div style="flex:1;min-width:120px">
-            <label class="muted">Episode</label>
-            <select id="episodeSelect" class="serverSelect" onchange="loadPlayer()"></select>
-          </div>
-        </div>
-      </div>
-
-      <div id="playerWrap" class="panel" aria-hidden="true">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <strong id="playerTitle"></strong>
-            <div id="serverStatus" class="muted" style="margin-top:4px"></div>
-            <div id="serverWarn" class="warn hidden">This server may be blocked or slow. Try another server if playback fails.</div>
-          </div>
-
-          <div class="controls" role="toolbar" aria-label="Player controls">
-            <label class="muted" for="serverSelect">Server</label>
-            <select id="serverSelect" class="serverSelect" onchange="onServerChange()" aria-label="Choose server"></select>
-            <button class="btn small" onclick="openEmbedInNewTab()">Open Embed</button>
-            <button class="btn small" onclick="copyEmbedUrl()">Copy Embed URL</button>
-            <button class="btn small" onclick="toggleFullscreen()">Fullscreen</button>
-            <button id="proxyDownloadBtn" class="btn small" onclick="downloadViaProxy()">Download via Proxy</button>
-          </div>
-        </div>
-
-        <div id="playerContainer" style="margin-top:12px"></div>
-      </div>
-
-      <div id="movieDownloader" class="panel hidden" style="margin-top:12px">
-        <h3 style="margin-top:0">🎞️ Movie Stream & Download</h3>
-        <label class="muted">Direct MP4 URL (comma-separated mirrors allowed)</label>
-        <textarea id="movieUrls" placeholder="https://cdn1.example.com/movie.mp4, https://mirror.example.com/movie.mp4"></textarea>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-          <button class="btn small" onclick="loadMovieFromUrls()">Load MP4(s)</button>
-          <button class="btn small" onclick="clearMovieUrls()">Clear</button>
-        </div>
-        <div id="movieContainer" style="margin-top:12px"></div>
-        <div class="mutedSmall">If direct MP4s are not available or CORS blocks playback/download, the selected embed server will be used.</div>
-      </div>
-    </div>
-  </main>
 </div>
 
 <script>
-/* ---------- preserved TMDb API key ---------- */
+/* ---------- preserved API key ---------- */
 const API_KEY = "3ca5f3df3ee394337393273aa440c425";
 
 /* state */
 let currentID = null;
-let currentType = null; // 'movie' or 'tv'
+let currentType = null;
 let currentDirectMedia = null;
 let currentEmbedServerIndex = 0;
 let currentEmbedUrl = '';
 
-/* ---------- embed servers with multiple patterns ----------
-   Each server has a name and an array of pattern builders.
-   For the selected server we try patterns in order until one loads.
+/* ---------- EMBED SERVERS
+   Keep vidsrc.to (previously working) and add SmashyStream.
+   Index mapping:
+     0 = VidKing
+     1 = 2Embed
+     2 = VidSrc (kept working)
+     3 = SmashyStream (added)
+     4 = AutoEmbed (watch-v2)
+     5 = MultiEmbed
 */
 const EMBED_SERVERS = [
-  {
-    name: 'VidKing',
-    patterns: [
-      (id,s,e) => `https://www.vidking.net/embed/movie/${id}?autoPlay=true`,
-      (id,s,e) => `https://www.vidking.net/embed/tv/${id}/${s}/${e}?autoPlay=true&nextEpisode=true&episodeSelector=true`
-    ]
-  },
-  {
-    name: '2Embed',
-    patterns: [
-      (id,s,e) => `https://www.2embed.cc/embed/${id}`,
-      (id,s,e) => `https://www.2embed.cc/embed/tv?id=${id}&s=${s}&e=${e}`
-    ]
-  },
-  {
-    name: 'VidSrc (to)',
-    patterns: [
-      (id,s,e) => `https://vidsrc.to/embed/movie/${id}`,
-      (id,s,e) => `https://vidsrc.to/embed/tv/${id}/${s}/${e}`,
-      // alternate pattern sometimes accepted by some hosts
-      (id,s,e) => `https://vidsrc.to/embed/${id}`
-    ]
-  },
-  {
-    name: 'Gomo',
-    patterns: [
-      (id,s,e) => `https://gomo.to/embed/movie/${id}`,
-      (id,s,e) => `https://gomo.to/embed/tv/${id}/${s}/${e}`,
-      (id,s,e) => `https://gomo.to/embed/${id}`
-    ]
-  },
-  {
-    name: 'VidCloud',
-    patterns: [
-      (id,s,e) => `https://vidcloud.co/embed/${id}`,
-      (id,s,e) => `https://vidcloud.co/embed/tv/${id}/${s}/${e}`
-    ]
-  },
-  {
-    name: 'AutoEmbed (watch-v2)',
-    patterns: [
-      (id,s,e) => `https://watch-v2.autoembed.app/movie/tmdb/${id}`,
-      (id,s,e) => `https://watch-v2.autoembed.app/tv/tmdb/${id}/season/${s}/episode/${e}`
-    ]
-  },
-  {
-    name: 'MultiEmbed',
-    patterns: [
-      (id,s,e) => `https://multiembed.mov/?video_id=${id}&tmdb=1`
-    ]
-  }
+  (id, type, season, episode) => type === 'movie'
+    ? `https://www.vidking.net/embed/movie/${id}?autoPlay=true`
+    : `https://www.vidking.net/embed/tv/${id}/${season}/${episode}?autoPlay=true&nextEpisode=true&episodeSelector=true`,
+
+  (id, type, season, episode) => type === 'movie'
+    ? `https://www.2embed.cc/embed/${id}`
+    : `https://www.2embed.cc/embed/tv?id=${id}&s=${season}&e=${episode}`,
+
+  // vidsrc.to (kept as working server)
+  (id, type, season, episode) => type === 'movie'
+    ? `https://vidsrc.to/embed/movie/${id}`
+    : `https://vidsrc.to/embed/tv/${id}/${season}/${episode}`,
+
+  // SmashyStream (added)
+  (id, type, season, episode) => type === 'movie'
+    ? `https://embed.smashystream.com/playere.php?tmdb=${id}`
+    : `https://embed.smashystream.com/playere.php?tmdb=${id}&season=${season}&episode=${episode}`,
+
+  // AutoEmbed (watch-v2)
+  (id, type, season, episode) => type === 'movie'
+    ? `https://watch-v2.autoembed.app/movie/tmdb/${id}`
+    : `https://watch-v2.autoembed.app/tv/tmdb/${id}/season/${season}/episode/${episode}`,
+
+  // MultiEmbed fallback
+  (id, type, season, episode) => `https://multiembed.mov/?video_id=${id}&tmdb=1`
 ];
 
 /* ---------- DOM refs ---------- */
@@ -195,60 +198,21 @@ const serverWarn = document.getElementById('serverWarn');
 const movieDownloader = document.getElementById('movieDownloader');
 const movieContainer = document.getElementById('movieContainer');
 
-/* ---------- TMDb search with fallback ----------
-   If TMDb rate-limits, fallback to public APIs (YTS for movies, TVMaze for TV).
-*/
-async function searchTMDB(){
+/* ---------- search & display ---------- */
+function searchTMDB(){
   const q = searchInput.value.trim();
   if(!q) return alert('Type something first!');
   searchBtn.disabled = true;
   searchResults.innerHTML = '<div class="muted">Searching…</div>';
-
   const urlM = `https://api.themoviedb.org/3/search/movie?api_key=${API_KEY}&query=${encodeURIComponent(q)}`;
   const urlT = `https://api.themoviedb.org/3/search/tv?api_key=${API_KEY}&query=${encodeURIComponent(q)}`;
-
-  try {
-    const [mRes, tRes] = await Promise.all([fetch(urlM), fetch(urlT)]);
-    if (mRes.status === 429 || tRes.status === 429 || !mRes.ok || !tRes.ok) {
-      await fallbackSearch(q);
-      return;
-    }
-    const movies = await mRes.json();
-    const tv = await tRes.json();
-    displayResults(movies.results || [], tv.results || []);
-  } catch (err) {
-    console.warn('TMDb failed, using fallback', err);
-    await fallbackSearch(q);
-  } finally {
-    searchBtn.disabled = false;
-  }
-}
-
-async function fallbackSearch(query){
-  const movies = [];
-  const tv = [];
-  try {
-    const yts = await fetch(`https://yts.mx/api/v2/list_movies.json?query_term=${encodeURIComponent(query)}`).then(r=>r.json()).catch(()=>null);
-    if (yts && yts.status === 'ok' && Array.isArray(yts.data.movies)) {
-      yts.data.movies.forEach(m => movies.push({ id: m.id, media_type: 'movie', title: m.title, poster_full: m.large_cover_image }));
-    }
-  } catch(e){ console.warn('YTS fallback failed', e); }
-
-  try {
-    const tvm = await fetch(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(query)}`).then(r=>r.json()).catch(()=>null);
-    if (Array.isArray(tvm)) {
-      tvm.forEach(item => {
-        if (item.show) tv.push({ id: item.show.id, media_type: 'tv', name: item.show.name, poster_full: item.show.image ? item.show.image.original : null });
-      });
-    }
-  } catch(e){ console.warn('TVMaze fallback failed', e); }
-
-  if (movies.length === 0 && tv.length === 0) {
-    searchResults.innerHTML = '<div class="muted">No results found (TMDb may be rate-limited).</div>';
-    return;
-  }
-
-  displayResults(movies, tv);
+  Promise.all([fetch(urlM), fetch(urlT)])
+    .then(res => Promise.all(res.map(r => r.json())))
+    .then(([movies, tv]) => {
+      displayResults(movies.results || [], tv.results || []);
+      searchBtn.disabled = false;
+    })
+    .catch(err => { console.error(err); searchResults.innerHTML = '<div class="muted">Search failed</div>'; searchBtn.disabled = false; });
 }
 
 function displayResults(movies, tv){
@@ -258,15 +222,16 @@ function displayResults(movies, tv){
     ...tv.map(t => ({...t, media_type:'tv'}))
   ];
   if(all.length === 0){ searchResults.innerHTML = '<div class="muted">No results found.</div>'; return; }
-  all.forEach(item => {
-    const title = item.media_type === 'movie' ? (item.title || item.name) : (item.name || item.title);
-    const poster = item.poster_full || (item.poster_path ? (item.poster_path.startsWith('http') ? item.poster_path : `https://image.tmdb.org/t/p/w200${item.poster_path}`) : '');
+  all.forEach((item) => {
+    const title = item.media_type === 'movie' ? item.title : item.name;
+    const poster = item.poster_path ? `https://image.tmdb.org/t/p/w200${item.poster_path}` : '';
     const div = document.createElement('div');
     div.className = 'result-item';
     div.tabIndex = 0;
-    div.innerHTML = `<div style="display:flex;align-items:center;gap:10px"><div style="min-width:0"><strong>${escapeHtml(title)}</strong><div class="muted">${item.media_type.toUpperCase()}</div></div>${poster?`<img class="poster" src="${poster}" alt="">`:''}</div>`;
+    div.setAttribute('role','button');
+    div.innerHTML = `<div class="meta"><div style="min-width:0"><strong>${escapeHtml(title)}</strong><div class="muted">${item.media_type.toUpperCase()}</div></div>${poster?`<img class="poster" src="${poster}" alt="">`:''}</div>`;
     div.onclick = () => selectItem(item.id, item.media_type, title);
-    div.onkeydown = e => { if(e.key === 'Enter') selectItem(item.id, item.media_type, title); };
+    div.onkeydown = (e) => { if(e.key === 'Enter') selectItem(item.id, item.media_type, title); };
     searchResults.appendChild(div);
   });
   const first = searchResults.querySelector('.result-item');
@@ -288,13 +253,8 @@ function selectItem(id, type, title){
   currentEmbedUrl = '';
   populateServerSelect();
   serverWarn.classList.add('hidden');
-  if(type === 'movie') {
-    document.getElementById('seasonSelect').innerHTML = '';
-    document.getElementById('episodeSelect').innerHTML = '';
-    loadMoviePlayer();
-  } else {
-    loadSeasons();
-  }
+  if(type === 'movie') loadMoviePlayer();
+  else loadSeasons();
   setTimeout(()=> serverSelect.focus(), 200);
 }
 
@@ -306,588 +266,45 @@ function showResults(){
 }
 
 /* ---------- seasons/episodes ---------- */
-async function loadSeasons(){
-  try {
-    const res = await fetch(`https://api.themoviedb.org/3/tv/${currentID}?api_key=${API_KEY}`);
-    if(!res.ok) throw new Error('TMDb seasons fetch failed');
-    const data = await res.json();
-    const seasonSelect = document.getElementById('seasonSelect');
-    seasonSelect.innerHTML = '';
-    (data.seasons || []).forEach(s => {
-      if(s.season_number > 0) seasonSelect.innerHTML += `<option value="${s.season_number}">Season ${s.season_number}</option>`;
-    });
-    loadEpisodes();
-  } catch(err) {
-    console.warn('loadSeasons failed', err);
-    document.getElementById('seasonSelect').innerHTML = `<option value="1">Season 1</option>`;
-    document.getElementById('episodeSelect').innerHTML = `<option value="1">Episode 1</option>`;
-    loadPlayer();
-  }
-}
-
-async function loadEpisodes(){
-  const season = document.getElementById('seasonSelect').value || 1;
-  try {
-    const res = await fetch(`https://api.themoviedb.org/3/tv/${currentID}/season/${season}?api_key=${API_KEY}`);
-    if(!res.ok) throw new Error('TMDb episodes fetch failed');
-    const data = await res.json();
-    const episodeSelect = document.getElementById('episodeSelect');
-    episodeSelect.innerHTML = '';
-    (data.episodes || []).forEach(ep => episodeSelect.innerHTML += `<option value="${ep.episode_number}">Episode ${ep.episode_number}</option>`);
-    loadPlayer();
-  } catch(err) {
-    console.warn('loadEpisodes failed', err);
-    document.getElementById('episodeSelect').innerHTML = `<option value="1">Episode 1</option>`;
-    loadPlayer();
-  }
-}
-
-/* ---------- server UI ---------- */
-function populateServerSelect(){
-  serverSelect.innerHTML = '';
-  EMBED_SERVERS.forEach((s, idx) => {
-    const opt = document.createElement('option');
-    opt.value = idx;
-    opt.textContent = s.name;
-    serverSelect.appendChild(opt);
-  });
-  serverSelect.value = currentEmbedServerIndex;
-  setServerStatus(`Selected server ${parseInt(serverSelect.value,10)+1}`);
-}
-
-function onServerChange(){
-  currentEmbedServerIndex = parseInt(serverSelect.value, 10);
-  serverWarn.classList.add('hidden');
-  if(!currentDirectMedia){
-    if(currentType === 'tv'){
-      const season = document.getElementById('seasonSelect').value || 1;
-      const episode = document.getElementById('episodeSelect').value || 1;
-      showEmbedServer(currentEmbedServerIndex, season, episode);
-    } else {
-      showEmbedServer(currentEmbedServerIndex);
-    }
-  } else {
-    setServerStatus(`Selected server ${currentEmbedServerIndex+1} (direct media loaded)`);
-  }
-}
-
-/* showEmbedServer: try each pattern for the chosen server in order until one loads.
-   Each pattern gets a short load timeout; if none load, show warning.
-*/
-function showEmbedServer(index, season = 1, episode = 1){
-  const server = EMBED_SERVERS[index];
-  if(!server) return;
-  const patterns = server.patterns || [];
-  if(patterns.length === 0) return;
-
-  playerContainer.innerHTML = '';
-  serverWarn.classList.add('hidden');
-  setServerStatus(`Using ${server.name} — trying patterns...`);
-  currentEmbedUrl = '';
-
-  let tried = 0;
-  let succeeded = false;
-
-  function tryNextPattern(){
-    if(succeeded || tried >= patterns.length){
-      if(!succeeded){
-        setServerStatus(`${server.name} — no working pattern found`);
-        serverWarn.classList.remove('hidden');
-      }
-      return;
-    }
-    const url = patterns[tried](currentID, season, episode);
-    tried++;
-    currentEmbedUrl = url;
-    playerContainer.innerHTML = '';
-    const iframe = document.createElement('iframe');
-    iframe.src = url;
-    iframe.id = 'embedFrame';
-    iframe.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture');
-    iframe.allowFullscreen = true;
-
-    let loaded = false;
-    const onLoad = () => {
-      loaded = true;
-      succeeded = true;
-      setServerStatus(`Using ${server.name} (pattern ${tried})`);
-      serverWarn.classList.add('hidden');
-      iframe.removeEventListener('load', onLoad);
-      clearTimeout(timeoutCheck);
-    };
-    iframe.addEventListener('load', onLoad);
-
-    const timeoutCheck = setTimeout(() => {
-      if(!loaded){
-        // try next pattern for same server
-        tryNextPattern();
-      }
-    }, 6000);
-
-    playerContainer.appendChild(iframe);
-  }
-
-  tryNextPattern();
-}
-
-/* ---------- movie player ---------- */
-function loadMoviePlayer(){
-  showEmbedServer(currentEmbedServerIndex);
-}
-
-/* ---------- helpers ---------- */
-function openEmbedInNewTab(){
-  if(!currentEmbedUrl) return alert('No embed URL available yet.');
-  window.open(currentEmbedUrl, '_blank', 'noopener');
-}
-function copyEmbedUrl(){
-  if(!currentEmbedUrl) return alert('No embed URL available yet.');
-  navigator.clipboard?.writeText(currentEmbedUrl).then(()=> alert('Embed URL copied')).catch(()=> alert('Copy failed'));
-}
-function toggleFullscreen(){
-  const wrap = document.getElementById('playerWrap');
-  if(!document.fullscreenElement) wrap.requestFullscreen().catch(()=>{});
-  else document.exitFullscreen().catch(()=>{});
-}
-function setServerStatus(text){ serverStatus.innerText = text; }
-
-/* ---------- movie downloader (direct MP4s) ---------- */
-function toggleMovieDownloader(){ movieDownloader.classList.toggle('hidden'); }
-function clearMovieUrls(){ document.getElementById('movieUrls').value=''; movieContainer.innerHTML=''; currentDirectMedia=null; setServerStatus('Cleared direct media'); }
-
-async function loadMovieFromUrls(){
-  const raw = document.getElementById('movieUrls').value.trim();
-  if(!raw) return alert('Enter at least one direct MP4 URL (comma-separated allowed).');
-  const urls = raw.split(',').map(s=>s.trim()).filter(Boolean);
-  movieContainer.innerHTML = 'Checking URLs...';
-  for(const url of urls){
-    try{
-      const res = await fetch(url, { method: 'HEAD', mode: 'cors' });
-      const ac = res.headers.get('access-control-allow-origin');
-      const contentType = res.headers.get('content-type') || '';
-      const ok = res.ok && (ac === '*' || ac !== null) && contentType.includes('video');
-      if(ok){
-        movieContainer.innerHTML = '';
-        const video = document.createElement('video');
-        video.controls = true;
-        video.src = url;
-        video.preload = 'metadata';
-        video.style.maxWidth = '100%';
-        const dl = document.createElement('a');
-        dl.href = url;
-        dl.download = url.split('/').pop() || 'movie.mp4';
-        dl.textContent = 'Download MP4';
-        dl.style.display = 'inline-block';
-        dl.style.marginTop = '8px';
-        movieContainer.appendChild(video);
-        movieContainer.appendChild(dl);
-        currentDirectMedia = { type: 'video', url, corsOk: true };
-        setServerStatus('Direct MP4 loaded (download available)');
-        return;
-      }
-    }catch(e){ console.warn('URL check failed', url, e); }
-  }
-  movieContainer.innerHTML = 'No direct MP4 with CORS found. Using selected embed server.';
-  currentDirectMedia = null;
-  showEmbedServer(currentEmbedServerIndex);
-}
-
-/* ---------- download via proxy ----------
-   Configure PROXY_BASE_URL to your proxy endpoint (recommended).
-*/
-const PROXY_BASE_URL = ''; // set to e.g. "https://your-proxy.example/fetch?url="
-const PUBLIC_PROXY_PATTERNS = [
-  'https://corsproxy.io/?',
-  'https://api.allorigins.win/raw?url=',
-  'https://thingproxy.freeboard.io/fetch/'
-];
-
-function buildProxyUrl(pattern, target){
-  if(pattern.endsWith('?') || pattern.includes('?')) return pattern + encodeURIComponent(target);
-  return pattern + encodeURIComponent(target);
-}
-
-function downloadViaProxy(){
-  const target = (currentDirectMedia && currentDirectMedia.url) ? currentDirectMedia.url : currentEmbedUrl;
-  if(!target) return alert('No media URL available to proxy-download.');
-  if(PROXY_BASE_URL && PROXY_BASE_URL.trim() !== ''){
-    const proxyUrl = PROXY_BASE_URL + encodeURIComponent(target);
-    window.open(proxyUrl, '_blank', 'noopener');
-    return;
-  }
-  for(const pattern of PUBLIC_PROXY_PATTERNS){
-    try {
-      const proxyUrl = buildProxyUrl(pattern, target);
-      window.open(proxyUrl, '_blank', 'noopener');
-      return;
-    } catch(e){ console.warn('Proxy build failed', pattern, e); }
-  }
-  alert('No proxy configured. Deploy a small proxy (Cloudflare Worker or simple server) and set PROXY_BASE_URL in the script for reliable downloads.');
-}
-
-/* ---------- keyboard / remote navigation ---------- */
-document.addEventListener('keydown', (e) => {
-  const active = document.activeElement;
-  if(searchResults.style.display !== 'none' && (e.key === 'ArrowDown' || e.key === 'ArrowUp')){
-    e.preventDefault();
-    const items = Array.from(searchResults.querySelectorAll('.result-item'));
-    if(items.length === 0) return;
-    let idx = items.indexOf(active);
-    if(idx === -1) idx = 0;
-    if(e.key === 'ArrowDown') idx = Math.min(items.length - 1, idx + 1);
-    else idx = Math.max(0, idx - 1);
-    items[idx].focus();
-  }
-  if((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && document.activeElement === serverSelect){
-    e.preventDefault();
-    const dir = e.key === 'ArrowRight' ? 1 : -1;
-    let next = (parseInt(serverSelect.value,10) + dir + EMBED_SERVERS.length) % EMBED_SERVERS.length;
-    serverSelect.value = next;
-    onServerChange();
-  }
-  if(e.key === 'Escape'){ if(searchResults.style.display === 'none') showResults(); }
-});
-
-/* ---------- utilities ---------- */
-function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-
-/* ---------- init ---------- */
-document.addEventListener('DOMContentLoaded', () => {
-  populateServerSelect();
-  setTimeout(()=> searchInput.focus(), 200);
-});
-</script>
-</body>
-</html>
-
-<title>TMDb Multi-Server Player — Movies & TV</title>
-<style>
-  :root{--bg:#0d0d0d;--panel:#111;--muted:#1a1a1a;--accent:#2b6;--text:#e6e6e6}
-  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,Arial,sans-serif}
-  .container{max-width:1200px;margin:12px auto;padding:16px;border-radius:12px;background:var(--panel);border:1px solid #222}
-  header{display:flex;align-items:center;gap:12px}
-  h1{font-size:20px;margin:0}
-  .searchRow{display:flex;gap:8px;width:100%;align-items:center;margin-top:12px}
-  #searchInput{flex:1;padding:12px;border-radius:10px;border:1px solid #333;background:var(--muted);color:var(--text);font-size:16px}
-  button,select,textarea{font-size:16px}
-  .btn{background:#222;color:var(--text);border:1px solid #333;padding:10px 12px;border-radius:10px;cursor:pointer}
-  .small{padding:8px 10px;font-size:15px}
-  main{display:flex;gap:16px;margin-top:12px}
-  .left{flex:0 0 360px;min-width:260px}
-  .right{flex:1;min-width:320px}
-  .panel{background:#0b0b0b;padding:12px;border-radius:10px;border:1px solid #222}
-  #searchResults{margin-top:10px;max-height:60vh;overflow:auto;padding-right:6px}
-  .result-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;border-radius:10px;background:var(--muted);margin-bottom:10px;border:1px solid #222;cursor:pointer}
-  .poster{width:64px;height:auto;border-radius:6px;flex-shrink:0}
-  .result-item:focus,.btn:focus,select:focus,#searchInput:focus,textarea:focus{outline:3px solid rgba(43,182,102,0.18);box-shadow:0 0 18px rgba(43,182,102,0.06)}
-  #playerWrap{display:none}
-  #playerContainer{background:#000;border-radius:10px;padding:8px;border:1px solid #222}
-  iframe,video{width:100%;height:56vh;border-radius:8px;background:#000;border:0}
-  .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
-  .serverSelect{padding:10px;border-radius:10px;background:#111;border:1px solid #333;color:var(--text)}
-  textarea#movieUrls{min-height:56px;resize:vertical}
-  .muted{color:#9aa0a6;font-size:13px}
-  .mutedSmall{color:#9aa0a6;font-size:13px;margin-top:8px}
-  .hidden{display:none}
-  .warn{color:#ffb86b;font-weight:600;margin-top:8px}
-  @media(max-width:900px){main{flex-direction:column}iframe,video{height:40vh}}
-</style>
-</head>
-<body>
-<div class="container" role="application" aria-label="TMDb media player">
-  <header>
-    <h1>🎬 TMDb Player</h1>
-    <div style="margin-left:auto" class="muted">Mobile & TV friendly</div>
-  </header>
-
-  <div class="searchRow">
-    <input id="searchInput" type="search" placeholder="Search movies or TV shows..." aria-label="Search" />
-    <button id="searchBtn" class="btn small" onclick="searchTMDB()">Search</button>
-    <button id="showResultsBtn" class="btn small hidden" onclick="showResults()">Show results</button>
-    <button id="toggleDownloaderBtn" class="btn small" onclick="toggleMovieDownloader()">Movie Stream & Download</button>
-  </div>
-
-  <main style="margin-top:12px">
-    <div class="left panel">
-      <div id="searchResults" tabindex="0" aria-live="polite"></div>
-      <div class="mutedSmall">Use Up/Down and Enter to navigate; Escape to reopen results.</div>
-    </div>
-
-    <div class="right">
-      <div id="selectorArea" class="panel hidden" aria-hidden="true">
-        <h2 id="selectedTitle" style="margin:0 0 8px 0;font-size:18px"></h2>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <div style="flex:1;min-width:120px">
-            <label class="muted">Season</label>
-            <select id="seasonSelect" class="serverSelect" onchange="loadEpisodes()"></select>
-          </div>
-          <div style="flex:1;min-width:120px">
-            <label class="muted">Episode</label>
-            <select id="episodeSelect" class="serverSelect" onchange="loadPlayer()"></select>
-          </div>
-        </div>
-      </div>
-
-      <div id="playerWrap" class="panel" aria-hidden="true">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <strong id="playerTitle"></strong>
-            <div id="serverStatus" class="muted" style="margin-top:4px"></div>
-            <div id="serverWarn" class="warn hidden">This server may be blocked or slow. Try another server if playback fails.</div>
-          </div>
-
-          <div class="controls" role="toolbar" aria-label="Player controls">
-            <label class="muted" for="serverSelect">Server</label>
-            <select id="serverSelect" class="serverSelect" onchange="onServerChange()" aria-label="Choose server"></select>
-            <button class="btn small" onclick="openEmbedInNewTab()">Open Embed</button>
-            <button class="btn small" onclick="copyEmbedUrl()">Copy Embed URL</button>
-            <button class="btn small" onclick="toggleFullscreen()">Fullscreen</button>
-            <button id="proxyDownloadBtn" class="btn small" onclick="downloadViaProxy()">Download via Proxy</button>
-          </div>
-        </div>
-
-        <div id="playerContainer" style="margin-top:12px"></div>
-      </div>
-
-      <div id="movieDownloader" class="panel hidden" style="margin-top:12px">
-        <h3 style="margin-top:0">🎞️ Movie Stream & Download</h3>
-        <label class="muted">Direct MP4 URL (comma-separated mirrors allowed)</label>
-        <textarea id="movieUrls" placeholder="https://cdn1.example.com/movie.mp4, https://mirror.example.com/movie.mp4"></textarea>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-          <button class="btn small" onclick="loadMovieFromUrls()">Load MP4(s)</button>
-          <button class="btn small" onclick="clearMovieUrls()">Clear</button>
-        </div>
-        <div id="movieContainer" style="margin-top:12px"></div>
-        <div class="mutedSmall">If direct MP4s are not available or CORS blocks playback/download, the selected embed server will be used.</div>
-      </div>
-    </div>
-  </main>
-</div>
-
-<script>
-/* ---------- preserved TMDb API key ---------- */
-const API_KEY = "3ca5f3df3ee394337393273aa440c425";
-
-/* state */
-let currentID = null;
-let currentType = null; // 'movie' or 'tv'
-let currentDirectMedia = null;
-let currentEmbedServerIndex = 0;
-let currentEmbedUrl = '';
-
-/* ---------- embed servers
-   Each entry is { name, buildMovie(id), buildTV(id,season,episode) }
-   This ensures TV endpoints always receive season/episode.
-*/
-const EMBED_SERVERS = [
-  {
-    name: 'VidKing',
-    buildMovie: id => `https://www.vidking.net/embed/movie/${id}?autoPlay=true`,
-    buildTV: (id, s, e) => `https://www.vidking.net/embed/tv/${id}/${s}/${e}?autoPlay=true&nextEpisode=true&episodeSelector=true`
-  },
-  {
-    name: '2Embed',
-    buildMovie: id => `https://www.2embed.cc/embed/${id}`,
-    buildTV: (id, s, e) => `https://www.2embed.cc/embed/tv?id=${id}&s=${s}&e=${e}`
-  },
-  {
-    name: 'VidSrc (to)',
-    buildMovie: id => `https://vidsrc.to/embed/movie/${id}`,
-    buildTV: (id, s, e) => `https://vidsrc.to/embed/tv/${id}/${s}/${e}`
-  },
-  {
-    name: 'VidSrc (me)',
-    buildMovie: id => `https://vidsrc.me/embed/movie/${id}`,
-    buildTV: (id, s, e) => `https://vidsrc.me/embed/tv/${id}/${s}/${e}`
-  },
-  {
-    name: 'SmashyStream',
-    buildMovie: id => `https://embed.smashystream.com/playere.php?tmdb=${id}`,
-    buildTV: (id, s, e) => `https://embed.smashystream.com/playere.php?tmdb=${id}&season=${s}&episode=${e}`
-  },
-  {
-    name: 'AutoEmbed (watch-v2)',
-    buildMovie: id => `https://watch-v2.autoembed.app/movie/tmdb/${id}`,
-    buildTV: (id, s, e) => `https://watch-v2.autoembed.app/tv/tmdb/${id}/season/${s}/episode/${e}`
-  },
-  {
-    name: 'MultiEmbed',
-    buildMovie: id => `https://multiembed.mov/?video_id=${id}&tmdb=1`,
-    buildTV: (id, s, e) => `https://multiembed.mov/?video_id=${id}&tmdb=1`
-  }
-];
-
-/* ---------- DOM refs ---------- */
-const searchInput = document.getElementById('searchInput');
-const searchBtn = document.getElementById('searchBtn');
-const searchResults = document.getElementById('searchResults');
-const showResultsBtn = document.getElementById('showResultsBtn');
-const selectorArea = document.getElementById('selectorArea');
-const playerWrap = document.getElementById('playerWrap');
-const playerContainer = document.getElementById('playerContainer');
-const playerTitle = document.getElementById('playerTitle');
-const serverSelect = document.getElementById('serverSelect');
-const serverStatus = document.getElementById('serverStatus');
-const serverWarn = document.getElementById('serverWarn');
-const movieDownloader = document.getElementById('movieDownloader');
-const movieContainer = document.getElementById('movieContainer');
-
-/* ---------- TMDb search with fallback ----------
-   If TMDb rate-limits, fallback to public APIs (YTS for movies, TVMaze for TV).
-*/
-async function searchTMDB(){
-  const q = searchInput.value.trim();
-  if(!q) return alert('Type something first!');
-  searchBtn.disabled = true;
-  searchResults.innerHTML = '<div class="muted">Searching…</div>';
-
-  const urlM = `https://api.themoviedb.org/3/search/movie?api_key=${API_KEY}&query=${encodeURIComponent(q)}`;
-  const urlT = `https://api.themoviedb.org/3/search/tv?api_key=${API_KEY}&query=${encodeURIComponent(q)}`;
-
-  try {
-    const [mRes, tRes] = await Promise.all([fetch(urlM), fetch(urlT)]);
-    if (mRes.status === 429 || tRes.status === 429 || !mRes.ok || !tRes.ok) {
-      await fallbackSearch(q);
-      return;
-    }
-    const movies = await mRes.json();
-    const tv = await tRes.json();
-    displayResults(movies.results || [], tv.results || []);
-  } catch (err) {
-    console.warn('TMDb failed, using fallback', err);
-    await fallbackSearch(q);
-  } finally {
-    searchBtn.disabled = false;
-  }
-}
-
-async function fallbackSearch(query){
-  const movies = [];
-  const tv = [];
-  try {
-    const yts = await fetch(`https://yts.mx/api/v2/list_movies.json?query_term=${encodeURIComponent(query)}`).then(r=>r.json()).catch(()=>null);
-    if (yts && yts.status === 'ok' && Array.isArray(yts.data.movies)) {
-      yts.data.movies.forEach(m => movies.push({ id: m.id, media_type: 'movie', title: m.title, poster_full: m.large_cover_image }));
-    }
-  } catch(e){ console.warn('YTS fallback failed', e); }
-
-  try {
-    const tvm = await fetch(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(query)}`).then(r=>r.json()).catch(()=>null);
-    if (Array.isArray(tvm)) {
-      tvm.forEach(item => {
-        if (item.show) tv.push({ id: item.show.id, media_type: 'tv', name: item.show.name, poster_full: item.show.image ? item.show.image.original : null });
+function loadSeasons(){
+  fetch(`https://api.themoviedb.org/3/tv/${currentID}?api_key=${API_KEY}`)
+    .then(r => r.json())
+    .then(data => {
+      const seasonSelect = document.getElementById('seasonSelect');
+      seasonSelect.innerHTML = '';
+      (data.seasons || []).forEach(s => {
+        if(s.season_number > 0) seasonSelect.innerHTML += `<option value="${s.season_number}">Season ${s.season_number}</option>`;
       });
-    }
-  } catch(e){ console.warn('TVMaze fallback failed', e); }
-
-  if (movies.length === 0 && tv.length === 0) {
-    searchResults.innerHTML = '<div class="muted">No results found (TMDb may be rate-limited).</div>';
-    return;
-  }
-
-  displayResults(movies, tv);
+      loadEpisodes();
+    })
+    .catch(err => console.error(err));
 }
 
-function displayResults(movies, tv){
-  searchResults.innerHTML = '';
-  const all = [
-    ...movies.map(m => ({...m, media_type:'movie'})),
-    ...tv.map(t => ({...t, media_type:'tv'}))
-  ];
-  if(all.length === 0){ searchResults.innerHTML = '<div class="muted">No results found.</div>'; return; }
-  all.forEach(item => {
-    const title = item.media_type === 'movie' ? (item.title || item.name) : (item.name || item.title);
-    const poster = item.poster_full || (item.poster_path ? (item.poster_path.startsWith('http') ? item.poster_path : `https://image.tmdb.org/t/p/w200${item.poster_path}`) : '');
-    const div = document.createElement('div');
-    div.className = 'result-item';
-    div.tabIndex = 0;
-    div.innerHTML = `<div style="display:flex;align-items:center;gap:10px"><div style="min-width:0"><strong>${escapeHtml(title)}</strong><div class="muted">${item.media_type.toUpperCase()}</div></div>${poster?`<img class="poster" src="${poster}" alt="">`:''}</div>`;
-    div.onclick = () => selectItem(item.id, item.media_type, title);
-    div.onkeydown = e => { if(e.key === 'Enter') selectItem(item.id, item.media_type, title); };
-    searchResults.appendChild(div);
-  });
-  const first = searchResults.querySelector('.result-item');
-  if(first) first.focus();
-}
-
-/* ---------- selection & player ---------- */
-function selectItem(id, type, title){
-  currentID = id; currentType = type;
-  playerTitle.innerText = title;
-  selectorArea.classList.remove('hidden');
-  selectorArea.setAttribute('aria-hidden','false');
-  playerWrap.style.display = 'block';
-  playerWrap.setAttribute('aria-hidden','false');
-  searchResults.style.display = 'none';
-  showResultsBtn.classList.remove('hidden');
-  currentDirectMedia = null;
-  currentEmbedServerIndex = 0;
-  currentEmbedUrl = '';
-  populateServerSelect();
-  serverWarn.classList.add('hidden');
-  if(type === 'movie') {
-    // hide season/episode controls for movies
-    document.getElementById('seasonSelect').innerHTML = '';
-    document.getElementById('episodeSelect').innerHTML = '';
-    loadMoviePlayer();
-  } else {
-    loadSeasons();
-  }
-  setTimeout(()=> serverSelect.focus(), 200);
-}
-
-function showResults(){
-  searchResults.style.display = '';
-  showResultsBtn.classList.add('hidden');
-  const first = searchResults.querySelector('.result-item');
-  if(first) first.focus();
-}
-
-/* ---------- seasons/episodes ---------- */
-async function loadSeasons(){
-  try {
-    const res = await fetch(`https://api.themoviedb.org/3/tv/${currentID}?api_key=${API_KEY}`);
-    if(!res.ok) throw new Error('TMDb seasons fetch failed');
-    const data = await res.json();
-    const seasonSelect = document.getElementById('seasonSelect');
-    seasonSelect.innerHTML = '';
-    (data.seasons || []).forEach(s => {
-      if(s.season_number > 0) seasonSelect.innerHTML += `<option value="${s.season_number}">Season ${s.season_number}</option>`;
-    });
-    loadEpisodes();
-  } catch(err) {
-    console.warn('loadSeasons failed', err);
-    // fallback: show a single season/episode selector so user can still try embed servers
-    document.getElementById('seasonSelect').innerHTML = `<option value="1">Season 1</option>`;
-    document.getElementById('episodeSelect').innerHTML = `<option value="1">Episode 1</option>`;
-    loadPlayer();
-  }
-}
-
-async function loadEpisodes(){
+function loadEpisodes(){
   const season = document.getElementById('seasonSelect').value || 1;
-  try {
-    const res = await fetch(`https://api.themoviedb.org/3/tv/${currentID}/season/${season}?api_key=${API_KEY}`);
-    if(!res.ok) throw new Error('TMDb episodes fetch failed');
-    const data = await res.json();
-    const episodeSelect = document.getElementById('episodeSelect');
-    episodeSelect.innerHTML = '';
-    (data.episodes || []).forEach(ep => episodeSelect.innerHTML += `<option value="${ep.episode_number}">Episode ${ep.episode_number}</option>`);
-    loadPlayer();
-  } catch(err) {
-    console.warn('loadEpisodes failed', err);
-    document.getElementById('episodeSelect').innerHTML = `<option value="1">Episode 1</option>`;
-    loadPlayer();
-  }
+  fetch(`https://api.themoviedb.org/3/tv/${currentID}/season/${season}?api_key=${API_KEY}`)
+    .then(r => r.json())
+    .then(data => {
+      const episodeSelect = document.getElementById('episodeSelect');
+      episodeSelect.innerHTML = '';
+      (data.episodes || []).forEach(ep => episodeSelect.innerHTML += `<option value="${ep.episode_number}">Episode ${ep.episode_number}</option>`);
+      loadPlayer();
+    })
+    .catch(err => console.error(err));
 }
 
-/* ---------- embed server UI ---------- */
+/* ---------- embed servers ---------- */
 function populateServerSelect(){
   serverSelect.innerHTML = '';
-  EMBED_SERVERS.forEach((s, idx) => {
+  EMBED_SERVERS.forEach((fn, idx) => {
     const opt = document.createElement('option');
     opt.value = idx;
-    opt.textContent = s.name;
+    if(idx === 0) opt.textContent = 'VidKing';
+    else if(idx === 1) opt.textContent = '2Embed';
+    else if(idx === 2) opt.textContent = 'VidSrc';
+    else if(idx === 3) opt.textContent = 'SmashyStream';
+    else if(idx === 4) opt.textContent = 'AutoEmbed (watch-v2)';
+    else opt.textContent = `Server ${idx+1}`;
     serverSelect.appendChild(opt);
   });
   serverSelect.value = currentEmbedServerIndex;
@@ -898,30 +315,23 @@ function onServerChange(){
   currentEmbedServerIndex = parseInt(serverSelect.value, 10);
   serverWarn.classList.add('hidden');
   if(!currentDirectMedia){
-    if(currentType === 'tv'){
-      const season = document.getElementById('seasonSelect').value || 1;
-      const episode = document.getElementById('episodeSelect').value || 1;
-      showEmbedServer(currentEmbedServerIndex, season, episode);
-    } else {
-      showEmbedServer(currentEmbedServerIndex);
-    }
+    const season = document.getElementById('seasonSelect') ? document.getElementById('seasonSelect').value : 1;
+    const episode = document.getElementById('episodeSelect') ? document.getElementById('episodeSelect').value : 1;
+    showEmbedServer(currentEmbedServerIndex, season, episode);
   } else {
     setServerStatus(`Selected server ${currentEmbedServerIndex+1} (direct media loaded)`);
   }
 }
 
-/* showEmbedServer builds the correct URL for movie or tv and loads iframe.
-   It shows a warning if iframe load doesn't fire within 8s (no auto-switch).
+/* showEmbedServer: loads iframe and performs a non-intrusive load check.
+   If iframe onload doesn't fire within 8s, show a warning but DO NOT auto-switch.
 */
 function showEmbedServer(index, season = 1, episode = 1){
-  const server = EMBED_SERVERS[index];
-  if(!server) return;
-  const url = (currentType === 'tv') ? server.buildTV(currentID, season, episode) : server.buildMovie(currentID);
+  const url = EMBED_SERVERS[index](currentID, currentType, season, episode);
   currentEmbedUrl = url;
   playerContainer.innerHTML = '';
   serverWarn.classList.add('hidden');
-  serverStatus.innerText = `Using ${server.name} — loading...`;
-
+  serverStatus.innerText = `Using server ${index+1} — loading...`;
   const iframe = document.createElement('iframe');
   iframe.src = url;
   iframe.id = 'embedFrame';
@@ -931,7 +341,7 @@ function showEmbedServer(index, season = 1, episode = 1){
   let loaded = false;
   const onLoad = () => {
     loaded = true;
-    serverStatus.innerText = `Using ${server.name}`;
+    serverStatus.innerText = `Using server ${index+1}`;
     serverWarn.classList.add('hidden');
     iframe.removeEventListener('load', onLoad);
     clearTimeout(timeoutCheck);
@@ -940,7 +350,7 @@ function showEmbedServer(index, season = 1, episode = 1){
 
   const timeoutCheck = setTimeout(() => {
     if(!loaded){
-      serverStatus.innerText = `Using ${server.name} — load may be blocked`;
+      serverStatus.innerText = `Using server ${index+1} — load may be blocked`;
       serverWarn.classList.remove('hidden');
     }
   }, 8000);
@@ -948,12 +358,7 @@ function showEmbedServer(index, season = 1, episode = 1){
   playerContainer.appendChild(iframe);
 }
 
-/* ---------- movie player (movie path) ---------- */
-function loadMoviePlayer(){
-  showEmbedServer(currentEmbedServerIndex);
-}
-
-/* ---------- player helpers ---------- */
+/* ---------- player controls ---------- */
 function openEmbedInNewTab(){
   if(!currentEmbedUrl) return alert('No embed URL available yet.');
   window.open(currentEmbedUrl, '_blank', 'noopener');
@@ -970,13 +375,19 @@ function toggleFullscreen(){
 function setServerStatus(text){ serverStatus.innerText = text; }
 
 /* ---------- movie downloader (direct MP4s) ---------- */
-function toggleMovieDownloader(){ movieDownloader.classList.toggle('hidden'); }
-function clearMovieUrls(){ document.getElementById('movieUrls').value=''; movieContainer.innerHTML=''; currentDirectMedia=null; setServerStatus('Cleared direct media'); }
-
+function toggleMovieDownloader(){
+  movieDownloader.classList.toggle('hidden');
+}
+function clearMovieUrls(){
+  document.getElementById('movieUrls').value = '';
+  movieContainer.innerHTML = '';
+  currentDirectMedia = null;
+  setServerStatus('Cleared direct media');
+}
 async function loadMovieFromUrls(){
   const raw = document.getElementById('movieUrls').value.trim();
   if(!raw) return alert('Enter at least one direct MP4 URL (comma-separated allowed).');
-  const urls = raw.split(',').map(s=>s.trim()).filter(Boolean);
+  const urls = raw.split(',').map(s => s.trim()).filter(Boolean);
   movieContainer.innerHTML = 'Checking URLs...';
   for(const url of urls){
     try{
@@ -1003,45 +414,55 @@ async function loadMovieFromUrls(){
         setServerStatus('Direct MP4 loaded (download available)');
         return;
       }
-    }catch(e){ console.warn('URL check failed', url, e); }
+    }catch(e){
+      console.warn('URL check failed', url, e);
+    }
   }
   movieContainer.innerHTML = 'No direct MP4 with CORS found. Using selected embed server.';
   currentDirectMedia = null;
   showEmbedServer(currentEmbedServerIndex);
 }
 
-/* ---------- download via proxy ----------
-   Configure PROXY_BASE_URL to your proxy endpoint (recommended).
-   If empty, the function will open a public proxy (best-effort) — public proxies are unreliable.
-*/
-const PROXY_BASE_URL = ''; // set to e.g. "https://your-proxy.example/fetch?url="
-const PUBLIC_PROXY_PATTERNS = [
-  'https://corsproxy.io/?',
-  'https://api.allorigins.win/raw?url=',
-  'https://thingproxy.freeboard.io/fetch/'
-];
-
-function buildProxyUrl(pattern, target){
-  if(pattern.endsWith('?') || pattern.includes('?')) return pattern + encodeURIComponent(target);
-  return pattern + encodeURIComponent(target);
+/* ---------- download helpers ---------- */
+async function downloadCurrent(){
+  if(currentDirectMedia && currentDirectMedia.url){
+    const url = currentDirectMedia.url;
+    try{
+      const res = await fetch(url, { method: 'HEAD', mode: 'cors' });
+      const ac = res.headers.get('access-control-allow-origin');
+      if(res.ok && (ac === '*' || ac !== null)){
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = url.split('/').pop() || 'media';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        return;
+      } else {
+        alert('Direct download blocked by CORS. Use "Download via Proxy" (requires a proxy you deploy).');
+        return;
+      }
+    }catch(e){
+      console.warn(e);
+      alert('Direct download check failed. Use "Download via Proxy" if you have a proxy available.');
+      return;
+    }
+  } else {
+    alert('No direct media loaded. Use the Movie Stream & Download panel to load a direct MP4 URL.');
+  }
 }
 
+/* Proxy download placeholder (configure your proxy URL) */
+const PROXY_BASE_URL = 'https://YOUR-PROXY.example/fetch?url=';
 function downloadViaProxy(){
   const target = (currentDirectMedia && currentDirectMedia.url) ? currentDirectMedia.url : currentEmbedUrl;
   if(!target) return alert('No media URL available to proxy-download.');
-  if(PROXY_BASE_URL && PROXY_BASE_URL.trim() !== ''){
-    const proxyUrl = PROXY_BASE_URL + encodeURIComponent(target);
-    window.open(proxyUrl, '_blank', 'noopener');
-    return;
+  if(PROXY_BASE_URL.includes('YOUR-PROXY')) {
+    return alert('Proxy not configured. Deploy a proxy and set PROXY_BASE_URL in the script.');
   }
-  for(const pattern of PUBLIC_PROXY_PATTERNS){
-    try {
-      const proxyUrl = buildProxyUrl(pattern, target);
-      window.open(proxyUrl, '_blank', 'noopener');
-      return;
-    } catch(e){ console.warn('Proxy build failed', pattern, e); }
-  }
-  alert('No proxy configured. Deploy a small proxy (Cloudflare Worker or simple server) and set PROXY_BASE_URL in the script for reliable downloads.');
+  const encoded = encodeURIComponent(target);
+  const proxyUrl = PROXY_BASE_URL + encoded;
+  window.open(proxyUrl, '_blank', 'noopener');
 }
 
 /* ---------- keyboard / remote navigation ---------- */
@@ -1064,7 +485,9 @@ document.addEventListener('keydown', (e) => {
     serverSelect.value = next;
     onServerChange();
   }
-  if(e.key === 'Escape'){ if(searchResults.style.display === 'none') showResults(); }
+  if(e.key === 'Escape'){
+    if(searchResults.style.display === 'none') showResults();
+  }
 });
 
 /* ---------- utilities ---------- */
