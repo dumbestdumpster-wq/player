@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Ultimate TMDb + Multi-Server Player</title>
+<title>TMDb + Multi-Server Player</title>
 <style>
   :root{--bg:#0d0d0d;--panel:#111;--muted:#1a1a1a;--accent:#2b6}
   body{background:var(--bg);color:#e6e6e6;font-family:Arial,Helvetica,sans-serif;margin:0;padding:20px}
@@ -14,29 +14,24 @@
   .result-item{cursor:pointer;margin-bottom:12px;padding:12px;border-radius:8px;background:var(--muted);border:1px solid #222;display:flex;justify-content:space-between;align-items:center}
   img.poster{width:70px;height:auto;border-radius:6px;margin-left:10px}
   #playerWrap{margin-top:18px;background:#000;border-radius:8px;padding:8px;border:1px solid #222}
-  iframe,video,audio{width:100%;border-radius:6px;background:#000}
+  iframe,video{width:100%;border-radius:6px;background:#000}
   iframe{height:560px;border:0}
   video{height:560px}
-  audio{height:64px}
   .controls{display:flex;gap:8px;margin-top:8px;align-items:center}
   .small{padding:6px 8px;font-size:14px}
   .muted{color:#aaa;font-size:13px}
-  .server-list{display:flex;gap:8px;flex-wrap:wrap}
-  .server-btn{padding:6px 8px;border-radius:6px;background:#222;border:1px solid #333;color:#ddd;cursor:pointer}
-  .server-btn.active{background:var(--accent);color:#012}
   @media(max-width:800px){iframe,video{height:320px}}
 </style>
 </head>
 <body>
 <div class="container">
-  <h2>🎬 Ultimate TMDb + Multi-Server Player (with audio + downloads)</h2>
+  <h2>🎬 TMDb + Multi-Server Player</h2>
 
   <label><strong>Search (movies & TV)</strong></label>
   <input id="searchInput" placeholder="Search movies or TV shows..." />
   <div class="row" style="margin-top:8px">
     <button onclick="searchTMDB()">Search</button>
-    <button onclick="toggleAudioPanel()" class="small">Audio Player</button>
-    <button onclick="toggleMovieDownloader()" class="small">Movie Downloader</button>
+    <button onclick="toggleMovieDownloader()" class="small">Movie Stream & Download</button>
   </div>
 
   <div id="searchResults" style="margin-top:16px"></div>
@@ -51,32 +46,19 @@
 
   <div id="playerWrap" style="display:none">
     <div style="display:flex;justify-content:space-between;align-items:center">
-      <div><strong id="playerTitle"></strong><div class="muted" id="serverStatus"></div></div>
+      <div>
+        <strong id="playerTitle"></strong>
+        <div class="muted" id="serverStatus"></div>
+      </div>
       <div class="controls">
+        <label class="muted" style="margin-right:8px">Server</label>
+        <select id="serverSelect" onchange="onServerChange()" class="small"></select>
         <button onclick="toggleFullscreen()" class="small">Fullscreen</button>
         <button id="downloadBtn" onclick="downloadCurrent()" class="small">Download</button>
       </div>
     </div>
 
-    <div style="margin-top:8px">
-      <div class="muted">Choose embed server (manual override):</div>
-      <div id="serverButtons" class="server-list" style="margin-top:6px"></div>
-    </div>
-
     <div id="playerContainer" style="margin-top:12px"></div>
-  </div>
-
-  <!-- Audio panel -->
-  <div id="audioPanel" style="display:none;margin-top:18px">
-    <h3>🎵 Audio Player & Downloader</h3>
-    <label>Direct MP3 URL (or streaming URL)</label>
-    <input id="audioUrl" placeholder="https://example.com/track.mp3" />
-    <div class="row" style="margin-top:8px">
-      <button onclick="loadAudio()" class="small">Load & Play</button>
-      <button onclick="addSampleAudio()" class="small">Sample MP3</button>
-    </div>
-    <div id="audioContainer" style="margin-top:12px"></div>
-    <div class="muted" style="margin-top:8px">If the server does not allow CORS, the download button may not work. Host files on a CORS-enabled server for reliable downloads.</div>
   </div>
 
   <!-- Movie downloader panel -->
@@ -89,7 +71,7 @@
       <button onclick="clearMovieUrls()" class="small">Clear</button>
     </div>
     <div id="movieContainer" style="margin-top:12px"></div>
-    <div class="muted" style="margin-top:8px">If direct MP4s are not available or CORS blocks playback/download, the player will fall back to embed servers.</div>
+    <div class="muted" style="margin-top:8px">If direct MP4s are not available or CORS blocks playback/download, the selected embed server will be used.</div>
   </div>
 </div>
 
@@ -97,22 +79,18 @@
 /* -------------------------
    Configuration & constants
    ------------------------- */
-const API_KEY = "3ca5f3df3ee394337393273aa440c425"; // preserved as requested
+const API_KEY = "3ca5f3df3ee394337393273aa440c425"; // preserved
 let currentID = null;
 let currentType = null;
-let currentDirectMedia = null; // {type:'audio'|'video', url:'', corsOk:true/false}
+let currentDirectMedia = null; // {type:'video', url:'', corsOk:true/false}
 let currentEmbedServerIndex = 0;
 
-/* List of embed server factories.
-   Keep VidKing usage intact (first entry uses vidking).
-   You can add or reorder servers here. */
+/* Embed server factories. VidKing kept intact as first entry. */
 const EMBED_SERVERS = [
-  // VidKing (kept exactly)
   (id, type, season, episode) => type === 'movie'
     ? `https://www.vidking.net/embed/movie/${id}?autoPlay=true`
     : `https://www.vidking.net/embed/tv/${id}/${season}/${episode}?autoPlay=true&nextEpisode=true&episodeSelector=true`,
 
-  // Additional common embed endpoints (may require TMDB id or different params)
   (id, type, season, episode) => type === 'movie'
     ? `https://www.2embed.cc/embed/${id}`
     : `https://www.2embed.cc/embed/tv?id=${id}&s=${season}&e=${episode}`,
@@ -125,7 +103,6 @@ const EMBED_SERVERS = [
     ? `https://autoembed.cc/movie/tmdb/${id}`
     : `https://autoembed.cc/tv/tmdb/${id}/season/${season}/episode/${episode}`,
 
-  // Generic multi-embed fallback (some services accept tmdb param)
   (id, type, season, episode) => `https://multiembed.mov/?video_id=${id}&tmdb=1`
 ];
 
@@ -173,13 +150,13 @@ function selectItem(id, type, title){
   document.getElementById('playerTitle').innerText = title;
   currentDirectMedia = null;
   currentEmbedServerIndex = 0;
-  renderServerButtons();
+  populateServerSelect();
   if(type === 'movie') loadMoviePlayer();
   else loadSeasons();
 }
 
 function loadMoviePlayer(){
-  // Try to show embed servers (we also provide manual server switching)
+  // Use the server selected by the user (no automatic switching)
   showEmbedServer(currentEmbedServerIndex);
 }
 
@@ -213,23 +190,37 @@ function loadEpisodes(){
 function loadPlayer(){
   const season = document.getElementById('seasonSelect').value;
   const episode = document.getElementById('episodeSelect').value;
-  // Prefer VidKing embed for TV (kept intact)
   showEmbedServer(currentEmbedServerIndex, season, episode);
 }
 
 /* -------------------------
-   Embed server handling
+   Embed server handling (manual only)
    ------------------------- */
-function renderServerButtons(){
-  const container = document.getElementById('serverButtons');
-  container.innerHTML = '';
+function populateServerSelect(){
+  const sel = document.getElementById('serverSelect');
+  sel.innerHTML = '';
   EMBED_SERVERS.forEach((fn, idx) => {
-    const btn = document.createElement('button');
-    btn.className = 'server-btn' + (idx === currentEmbedServerIndex ? ' active' : '');
-    btn.textContent = `Server ${idx+1}`;
-    btn.onclick = () => { currentEmbedServerIndex = idx; showEmbedServer(idx); renderServerButtons(); };
-    container.appendChild(btn);
+    const opt = document.createElement('option');
+    opt.value = idx;
+    opt.textContent = `Server ${idx+1}`;
+    sel.appendChild(opt);
   });
+  sel.value = currentEmbedServerIndex;
+  setServerStatus(`Selected server ${parseInt(sel.value,10)+1}`);
+}
+
+function onServerChange(){
+  const sel = document.getElementById('serverSelect');
+  currentEmbedServerIndex = parseInt(sel.value, 10);
+  // If a direct video is playing, keep it; otherwise reload embed with chosen server
+  if(!currentDirectMedia) {
+    // For TV, preserve season/episode
+    const season = document.getElementById('seasonSelect') ? document.getElementById('seasonSelect').value : 1;
+    const episode = document.getElementById('episodeSelect') ? document.getElementById('episodeSelect').value : 1;
+    showEmbedServer(currentEmbedServerIndex, season, episode);
+  } else {
+    setServerStatus(`Selected server ${currentEmbedServerIndex+1} (direct media loaded; server used only for embeds)`);
+  }
 }
 
 function showEmbedServer(index, season = 1, episode = 1){
@@ -242,21 +233,10 @@ function showEmbedServer(index, season = 1, episode = 1){
   iframe.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture');
   iframe.allowFullscreen = true;
   iframe.onload = () => {
-    setServerStatus(`Using server ${index+1} (loaded)`);
+    setServerStatus(`Using server ${index+1}`);
   };
-  // If iframe doesn't load quickly, try next server automatically
-  const timeout = setTimeout(() => {
-    // If still the same iframe in container, try next
-    if(document.getElementById('embedFrame') === iframe){
-      setServerStatus(`Server ${index+1} slow or blocked — trying next...`);
-      const next = (index + 1) % EMBED_SERVERS.length;
-      currentEmbedServerIndex = next;
-      renderServerButtons();
-      showEmbedServer(next, season, episode);
-    }
-  }, 7000);
   container.appendChild(iframe);
-  setServerStatus(`Attempting server ${index+1}...`);
+  setServerStatus(`Using server ${index+1}`);
 }
 
 /* -------------------------
@@ -274,13 +254,11 @@ function setServerStatus(text){
 
 /* Download current media:
    - If a direct media URL is loaded (currentDirectMedia), attempt direct download.
-   - If not, inform user to provide direct URL (movie downloader or audio panel).
+   - Otherwise instruct user to use the Movie Stream & Download panel.
 */
 async function downloadCurrent(){
   if(currentDirectMedia && currentDirectMedia.url){
-    // Attempt to download directly
     const url = currentDirectMedia.url;
-    // Try to fetch HEAD to check CORS; if allowed, use anchor download; otherwise inform user
     try{
       const res = await fetch(url, { method: 'HEAD', mode: 'cors' });
       const ac = res.headers.get('access-control-allow-origin');
@@ -298,64 +276,11 @@ async function downloadCurrent(){
       }
     }catch(e){
       console.warn(e);
-      alert('Could not verify download availability. If you have a direct URL, use the Movie Downloader or Audio Player panels.');
+      alert('Could not verify download availability. Use the Movie Stream & Download panel to load a direct MP4 URL.');
       return;
     }
   } else {
-    alert('No direct media loaded. Use the Movie Downloader (enter MP4 URL) or Audio Player (enter MP3 URL) to enable downloads.');
-  }
-}
-
-/* -------------------------
-   Audio player & downloader
-   ------------------------- */
-function toggleAudioPanel(){
-  const p = document.getElementById('audioPanel');
-  p.style.display = p.style.display === 'block' ? 'none' : 'block';
-}
-
-function addSampleAudio(){
-  document.getElementById('audioUrl').value = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
-  loadAudio();
-}
-
-async function loadAudio(){
-  const url = document.getElementById('audioUrl').value.trim();
-  if(!url) return alert('Enter an MP3 URL');
-  const container = document.getElementById('audioContainer');
-  container.innerHTML = 'Checking URL...';
-  // Quick CORS check
-  let corsOk = false;
-  try{
-    const res = await fetch(url, { method: 'HEAD', mode: 'cors' });
-    const ac = res.headers.get('access-control-allow-origin');
-    corsOk = res.ok && (ac === '*' || ac !== null);
-  }catch(e){
-    corsOk = false;
-  }
-  container.innerHTML = '';
-  if(corsOk){
-    const audio = document.createElement('audio');
-    audio.controls = true;
-    audio.src = url;
-    audio.preload = 'metadata';
-    const dl = document.createElement('a');
-    dl.href = url;
-    dl.download = url.split('/').pop() || 'track.mp3';
-    dl.textContent = 'Download MP3';
-    dl.style.marginLeft = '12px';
-    container.appendChild(audio);
-    container.appendChild(dl);
-    currentDirectMedia = { type: 'audio', url, corsOk: true };
-  } else {
-    // If CORS blocked, still try to embed in iframe as fallback
-    const iframe = document.createElement('iframe');
-    iframe.src = url;
-    iframe.style.height = '120px';
-    iframe.setAttribute('allow', 'autoplay');
-    container.appendChild(iframe);
-    container.appendChild(document.createTextNode('Direct download not available due to CORS. Try hosting the file on a CORS-enabled server.'));
-    currentDirectMedia = { type: 'audio', url, corsOk: false };
+    alert('No direct media loaded. Use the Movie Stream & Download panel to load a direct MP4 URL for download.');
   }
 }
 
@@ -382,13 +307,11 @@ async function loadMovieFromUrls(){
   // Try each URL for CORS/playability; pick first that works
   for(const url of urls){
     try{
-      // HEAD check for CORS
       const res = await fetch(url, { method: 'HEAD', mode: 'cors' });
       const ac = res.headers.get('access-control-allow-origin');
       const contentType = res.headers.get('content-type') || '';
       const ok = res.ok && (ac === '*' || ac !== null) && contentType.includes('video');
       if(ok){
-        // Use native video element
         container.innerHTML = '';
         const video = document.createElement('video');
         video.controls = true;
@@ -404,19 +327,17 @@ async function loadMovieFromUrls(){
         container.appendChild(video);
         container.appendChild(dl);
         currentDirectMedia = { type: 'video', url, corsOk: true };
-        // If user had previously selected embed server, keep it but show native video
+        setServerStatus('Direct MP4 loaded (download available)');
         return;
       }
     }catch(e){
       console.warn('URL check failed', url, e);
     }
   }
-  // If none of the direct URLs worked, fall back to embed servers
-  container.innerHTML = '';
-  container.appendChild(document.createTextNode('No direct MP4 with CORS found. Falling back to embed servers...'));
-  // Show embed server for the current movie
-  showEmbedServer(currentEmbedServerIndex);
+  // If none of the direct URLs worked, use the selected embed server (no automatic switching)
+  container.innerHTML = 'No direct MP4 with CORS found. Using selected embed server.';
   currentDirectMedia = null;
+  showEmbedServer(currentEmbedServerIndex);
 }
 
 /* -------------------------
@@ -425,11 +346,10 @@ async function loadMovieFromUrls(){
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 /* -------------------------
-   Initialize server buttons on load
+   Initialize server select on load
    ------------------------- */
 document.addEventListener('DOMContentLoaded', () => {
-  renderServerButtons();
-  // Hide download button until direct media loaded
+  populateServerSelect();
   document.getElementById('downloadBtn').style.display = 'inline-block';
 });
 </script>
